@@ -1,0 +1,21 @@
+[package]
+name = "sentinel1_denoise"
+version = "0.1.0"
+authors = ["PeterQLee <leep1995@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+quick-xml = "0.14.0"
+ndarray = "0.12.1"
+ndarray-parallel = "0.9.0"
+rayon = "1.0.3"
+time = "*"
+hdf5 = "0.5.1"
+
+[lib]
+name = "denoise_engine"
+path = "src/lib.rs"
+
+[[bin]]
+name = "quickrun"
+path = "src/quickrun.rs"
