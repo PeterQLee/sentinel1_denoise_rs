@@ -11,6 +11,7 @@ ndarray-parallel = "0.9.0"
 rayon = "1.0.3"
 time = "*"
 hdf5 = "0.5.1"
+zip = "0.5.3"
 
 [lib]
 name = "denoise_engine"
@@ -19,3 +20,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "quickrun"
 path = "src/quickrun.rs"
+
+[[bin]]
+name = "noise_to_tiff"
+path = "src/noise_to_tiff.rs"

@@ -282,26 +282,52 @@ where F:Fn(&mut Reader<&[u8]>) -> (T){
 
 
 impl NoiseField {
-    pub fn new(filebuffer:&str) -> NoiseField {
+    ///Creates a new noise field given the xml file
+    ///
+    /// Arguments
+    ///
+    /// * `filebuffer` - The buffer holding the contents of the noise cal xml file
+    ///
+    /// * `two_eight_flag` - Flag indicates if product is from IPF 2.8 or later
+    pub fn new(filebuffer:&str, two_eight_flag:bool) -> NoiseField {
         let mut reader = Reader::from_str(filebuffer);
+
+        if two_eight_flag {
         
-        let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
-                                   Box::new(b"noiseRangeVectorList"),
-                                   ];
+            let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+                                       Box::new(b"noiseRangeVectorList"),
+            ];
+            
+            let azst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+                                       Box::new(b"noiseAzimuthVectorList"),
+            ];
+            
+            let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
+            reader = Reader::from_str(filebuffer);
+            let azimuth_result = seek_to_list(&azst, &mut reader, azimuth_parse_func);
+            
+            return NoiseField {
+                data:NoiseField::compute_field(range_result, azimuth_result, (9992,10400))
+            }
+        }
+        
+        else {
+            let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+                                       Box::new(b"noiseVectorList"),
+            ];
+            let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
+            return NoiseField {
+                data:NoiseField::compute_field(range_result, );
+            }
+            
 
-        let azst:[Box<&[u8]>;2] = [Box::new(b"noise"),
-                                   Box::new(b"noiseAzimuthVectorList"),
-        ];
-
-        let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
-        reader = Reader::from_str(filebuffer);        
-        let azimuth_result = seek_to_list(&azst, &mut reader, azimuth_parse_func);
-
-        NoiseField {
-            data:NoiseField::compute_field(range_result, azimuth_result, (9992,10400))
         }
     }
 
+    fn old_compute_field(rg_result:Vec<NoiseRangeEntry>) {
+        
+    }
+    
     fn compute_field(rg_result:Vec<NoiseRangeEntry>, az_result:Vec<NoiseAzimuthEntry>, shape:(usize, usize)) -> Array2<f64>{
         let rgarr = NoiseField::interpolate_row(rg_result, shape);
         let azarr = NoiseField::interpolate_col(az_result, shape);
@@ -320,25 +346,8 @@ impl NoiseField {
         let mut arr:Array2<f64> = Array2::zeros(shape);
 
         
-        //let mut tmparray:Array2<f64> = Array2::zeros((rg_result.len(), shape.1));
         let mut arrlist:Vec<Array1<f64>> = vec![Array1::zeros(shape.1);rg_result.len()]; //this is really bad
-        /*
-        let mit = arr.indexed_iter()
-            .batching(|x| match x.next() {
-                Some(a) => {
-                    if a.0 == (0,0) {Some(a)} //aggregate this
-                    else {None}},
-                None => None}
-            );
-         */
 
-        //let mut t = tmparray.slice_axis(Axis(0), Slice::from(..));
-        //let mut t :Array1<f64> = Array1::zeros((1));
-        //rg_result.par_iter()
-        //    .and(&tmparray.genrows())
-        //Zip::from(&mut tmparray.genrows_mut())
-        //tmparray.iter().zip(t.iter());
-        //let rgarr:Array1<_> = Array::from_vec(rg_result);
         let mut t0 = PreciseTime::now();
         arrlist.par_iter_mut()
             .zip(rg_result.par_iter())
