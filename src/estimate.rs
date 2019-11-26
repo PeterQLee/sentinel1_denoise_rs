@@ -239,42 +239,58 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
                                  n_col_eqs:usize,
                                  n_reg:usize,
                                  gamma:f64) {
-    let (x_vals, y_vals) = gather_thermal(x,y, swath_bounds);
+    let (x_vals, y_vals) = _gather_intrasubswath(x,y, swath_bounds);
 
     let n = 0;
     let N = _num_thermal(swath_bounds);
     //kratio = np.zeros(N)
-    for a in 0..NUM_SUBSWATHS:
+    for a in 0..NUM_SUBSWATHS {
+        
+        let mut n_add = 0;
         if a == 0 {
-            n_add = 0;
-            for fa, la, fr, lr in swath_bounds[0] {
+            for &swth in swath_bounds[0] {
                     
-                if la-fa >= 40 {
-                    n_add += 4*4
+                if swth.la-swth.fa >= 40 {
+                    n_add += 4*4;
                 }
             }
         }
-        else:
-            n_add = 0
-            for fa, la, fr, lr in swath_bounds[a]:
-                if la-fa >= 40:
-                    n_add += 2*4
+        else {
+            for &swth in swath_bounds[a] {
+                if swth.la-swth.fa >= 40 {
+                    n_add += 2*4;
+                }
+            }
+        }
+        
+        let st = n_row_eqs + n_col_eqs + n_reg + n;
+        //m[st: st + n_add] = \
+        //   gamma * x_vals[n:n + n_add]
 
-            #n_add = len(swath_bounds[a])*2*4 #TODO: fill
+        //C[st: st + n_add,a] = \
+        //    gamma * y_vals[n:n + n_add]
 
-        st = n_row_eqs + n_col_eqs + n_reg + n
-        m[st: st + n_add] = \
-            gamma * x_vals[n:n + n_add]
-        C[st: st + n_add,a] = \
-            gamma * y_vals[n:n + n_add]
 
-        kratio[n:n+n_add] = C[st:st+n_add,a]*m[st:st+n_add]/np.square(C[st:st+n_add,a])
+        //kratio[n:n+n_add] = C[st:st+n_add,a]*m[st:st+n_add]/np.square(C[st:st+n_add,a])
+        Zip::from(m.slice_mut(s![st..st+n_add]))
+            .and(C.slice_mut(s![st..st+n_add,a]))
+            .and(x_vals.slice(s![n..n+n_add]))
+            .and(y_vals.slice(s![n..n+n_add]))
+            .apply(|m_, c_, x_, y_| {
+                let mval = gamma*x_;
+                let cval = gamma*y_;
+                let kratio = cval*mval/(cval*cval);
+                if kratio >=0 && kratio <=2.5 {
+                    *m_ = mval;
+                    c_ = cval;
+                }
+            });
+
         
 
-        n+= n_add
+        n+= n_add;
+    }
 
-    m[n_row_eqs + n_col_eqs + n_reg:][(kratio < 0) | (kratio > 2.5)] = 0
-    C[n_row_eqs + n_col_eqs + n_reg:][(kratio < 0) | (kratio > 2.5)] = 0
 
 }
 
@@ -357,3 +373,93 @@ fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Arr
     }
     return meanvals;
 }
+
+
+fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> (Array1<f64>, Array1<f64>) {
+    
+    let pad = 60;
+    let bf = 10;
+    let Nelems = _num_intrasubswath(swath_bounds);
+    let xvals:Array1<f64> = Array1::zeros(Nelems);
+    let yvals:Array1<f64> = Array1::zeros(Nelems);
+    let mut sn = 0;
+
+    for a in 0..NUM_SUBSWATHS {
+        for i in 0..swath_bounds[a].len() {
+            let swth = &swath_bounds[a][i];
+            // Find the mins and max
+            let mut n = 0;
+            let vy_ = np.mean(y[fa:la+1, fr:lr+1], axis = 0);
+            let vx_ = np.mean(x[fa:la+1, fr:lr+1], axis = 0);
+
+            if a == 0 {
+                // EW has multiple peaks
+                
+                let Mx0 = pad + 20;
+                let Mx2 = lr - fr - pad;
+
+                let mn0 = np.argmin(vy_[0:(Mx2-Mx0)/2]);
+                let mn1 = (Mx2-Mx0)/2 + np.argmin(vy_[(Mx2-Mx0)/2:])
+
+                Mx1 = mn0 + np.argmax(vy_[mn0:mn1])
+
+                if la - fa < 40: continue #Skip if less than 40 samples
+                for bnum in range(4): #TODO: fill
+                    step = (la+1-fa)//4
+                    if bnum == 3:
+                        lend = la+1
+                    else:
+                        lend = fa+(bnum+1)*step
+                    
+                    vy = np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
+                    vx = np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
+
+                    xvals[sn] = np.mean(vx[Mx0-bf:Mx0+bf] - vx[mn0-bf:mn0+bf])
+                    yvals[sn] = np.mean(vy[Mx0-bf:Mx0+bf] - vy[mn0-bf:mn0+bf])
+                    sn+=1
+
+                    xvals[sn] = np.mean(vx[mn0-bf:mn0+bf] - vx[Mx1-bf:Mx1+bf])
+                    yvals[sn] = np.mean(vy[mn0-bf:mn0+bf] - vy[Mx1-bf:Mx1+bf])
+                    sn+=1
+
+                    xvals[sn] = np.mean(vx[Mx1-bf:Mx1+bf] - vx[mn1-bf:mn1+bf])
+                    yvals[sn] = np.mean(vy[Mx1-bf:Mx1+bf] - vy[mn1-bf:mn1+bf])
+                    sn+=1
+
+                    xvals[sn] = np.mean(vx[mn1-bf:mn1+bf] - vx[Mx2-bf:Mx2+bf])
+                    yvals[sn] = np.mean(vy[mn1-bf:mn1+bf] - vy[Mx2-bf:Mx2+bf])
+                    sn+=1
+
+
+
+            else:
+                Mx0 = pad#TODO: fill
+                Mx1 = lr - fr - pad
+                if a == 4:
+                    Mx1 = lr - fr - 100
+                    
+                mn0 = Mx0 + np.argmin(vy_[Mx0:Mx1])
+                
+                
+                if la - fa < 40: continue #Skip if less than 40 samples
+
+                for bnum in range(4):
+                    step = (la+1-fa)//4#TODO: fill
+                    if bnum == 3:
+                        lend = la+1
+                    else:
+                        lend = fa+(bnum+1)*step
+                    vy = np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
+                    vx = np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
+
+                    assert(not np.all(np.isnan(vy)) and not np.all(np.isnan(vx)))
+                    xvals[sn] = np.mean((vx[Mx0-bf:Mx0+bf] - vx[mn0-bf:mn0+bf]))
+                    yvals[sn] = np.mean((vy[Mx0-bf:Mx0+bf] - vy[mn0-bf:mn0+bf]))
+                    sn+=1
+
+                    xvals[sn] = np.mean((vx[mn0-bf:mn0+bf] - vx[Mx1-bf:Mx1+bf]))
+                    yvals[sn] = np.mean((vy[mn0-bf:mn0+bf] - vy[Mx1-bf:Mx1+bf]))
+                    sn+=1
+
+    return xvals, yvals
+                }
