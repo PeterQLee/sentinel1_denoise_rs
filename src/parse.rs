@@ -292,7 +292,7 @@ impl NoiseField {
     pub fn new(filebuffer:&str, two_eight_flag:bool) -> NoiseField {
         let mut reader = Reader::from_str(filebuffer);
 
-        if two_eight_flag {
+        //if two_eight_flag {
         
             let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
                                        Box::new(b"noiseRangeVectorList"),
@@ -308,20 +308,19 @@ impl NoiseField {
             
             return NoiseField {
                 data:NoiseField::compute_field(range_result, azimuth_result, (9992,10400))
-            }
-        }
+            };
+       //     }
+       // }
         
-        else {
-            let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
-                                       Box::new(b"noiseVectorList"),
-            ];
-            let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
-            return NoiseField {
-                data:NoiseField::compute_field(range_result, );
-            }
+      //  else {
+       //     let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+        //                               Box::new(b"noiseVectorList"),
+       //     ];
+       //     let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
+       //     return NoiseField {
+       //         data:NoiseField::compute_field(range_result, )
+       //     };
             
-
-        }
     }
 
     fn old_compute_field(rg_result:Vec<NoiseRangeEntry>) {
