@@ -7,6 +7,43 @@ use ndarray_parallel::prelude::*;
 //use rayon::prelude::*;
 
 
+/// Mean along first axis
+fn mean_ax0 (x:ArrayView2<f64>, sa:usize, la:usize, sb:usize, lb:usize) -> Array1<f64>{
+    x.slice(s![sa..la, sb..lb])
+        .sum_axis(Axis(0)) / 
+        ( (la-sa) as f64)
+}
+
+///Mean of 1d array
+fn mean1(x:ArrayView1<f64>, sa:usize, la:usize) -> f64{
+    x.slice(s![sa..la])
+        .sum() / 
+        ( ( (la-sa) as f64) )
+}
+
+///Mean of 2d array
+fn mean2(x:ArrayView2<f64>, sa:usize, la:usize, sb:usize, lb:usize) -> f64{
+    x.slice(s![sa..la, sb..lb])
+        .sum() / 
+        ( ( (la-sa) as f64) * ( ( lb-sb) as f64) )
+}
+
+///argmin of 1d array
+fn argmin1(x:ArrayView1<f64>, sa:usize, la:usize) -> usize {
+    x.slice(s![sa..la]).indexed_iter()
+        .fold((0_usize, 9999999.0), |acc, a| if *a.1 <= acc.1 {(a.0, *a.1)} else {acc} ).0
+}
+
+///argmax of 1darray
+fn argmax1(x:ArrayView1<f64>, sa:usize, la:usize) -> usize {
+    x.slice(s![sa..la]).indexed_iter()
+        .fold((0_usize, -9999999.0), |acc, a| if *a.1 >= acc.1 {(a.0, *a.1)} else {acc} ).0
+}
+
+
+
+
+
 pub struct SwathElem {
     fa:usize,
     la:usize,
@@ -39,9 +76,9 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
     let n_row_eqs = _num_row_equations(x.dim(), w, swath_bounds);
     let n_col_eqs = _num_col_equations(swath_bounds);
     let n_reg = _num_regularization();
-    let n_thermal = _num_thermal(swath_bounds);
+    let n_intrasubswath = _num_intrasubswath(swath_bounds);
 
-    let n_eqs = n_row_eqs + n_col_eqs + n_reg + n_thermal;
+    let n_eqs = n_row_eqs + n_col_eqs + n_reg + n_intrasubswath;
 
     // allocate matrices/vectors
     let mut C:Array2<f64> = Array2::zeros((n_eqs, 5));
@@ -107,7 +144,7 @@ fn _num_col_equations(swath_bounds:&[&[SwathElem]]) -> usize{
 fn _num_regularization() -> usize{
     return NUM_SUBSWATHS;
 }
-fn _num_thermal(swath_bounds:&[&[SwathElem]]) -> usize{
+fn _num_intrasubswath(swath_bounds:&[&[SwathElem]]) -> usize{
     let mut tot = 0;
 
     for elem in swath_bounds[0].iter() { //first subswath
@@ -241,14 +278,14 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
                                  gamma:f64) {
     let (x_vals, y_vals) = _gather_intrasubswath(x,y, swath_bounds);
 
-    let n = 0;
-    let N = _num_thermal(swath_bounds);
+    let mut n = 0;
+    let N = _num_intrasubswath(swath_bounds);
     //kratio = np.zeros(N)
     for a in 0..NUM_SUBSWATHS {
         
         let mut n_add = 0;
         if a == 0 {
-            for &swth in swath_bounds[0] {
+            for swth in swath_bounds[0] {
                     
                 if swth.la-swth.fa >= 40 {
                     n_add += 4*4;
@@ -256,7 +293,7 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
             }
         }
         else {
-            for &swth in swath_bounds[a] {
+            for swth in swath_bounds[a] {
                 if swth.la-swth.fa >= 40 {
                     n_add += 2*4;
                 }
@@ -280,9 +317,9 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
                 let mval = gamma*x_;
                 let cval = gamma*y_;
                 let kratio = cval*mval/(cval*cval);
-                if kratio >=0 && kratio <=2.5 {
+                if kratio >= 0.0 && kratio <=2.5 {
                     *m_ = mval;
-                    c_ = cval;
+                    *c_ = cval;
                 }
             });
 
@@ -320,14 +357,14 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 0]))
                 .and(&x.slice(s![swth.fa..swth.la-hf_add, swth.fr..swth.lr]).sum_axis(Axis(1)))
                 .apply(|xr, xm| {
-                    *xr = xm/((swth.fr-swth.lr) as f64);
+                    *xr = xm/((swth.lr-swth.fr) as f64);
                 });
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 1]))
                 .and(&x.slice(s![swth.fa+half_period..swth.la+half_period-hf_add,
                                  swth.fr..swth.lr]).sum_axis(Axis(1)))
                 .apply(|xr, xm| {
-                    *xr = xm/((swth.fr-swth.lr) as f64);
+                    *xr = xm/((swth.lr-swth.fr) as f64);
                 });
 
                       
@@ -374,14 +411,13 @@ fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Arr
     return meanvals;
 }
 
-
 fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> (Array1<f64>, Array1<f64>) {
     
     let pad = 60;
     let bf = 10;
     let Nelems = _num_intrasubswath(swath_bounds);
-    let xvals:Array1<f64> = Array1::zeros(Nelems);
-    let yvals:Array1<f64> = Array1::zeros(Nelems);
+    let mut xvals:Array1<f64> = Array1::zeros(Nelems);
+    let mut yvals:Array1<f64> = Array1::zeros(Nelems);
     let mut sn = 0;
 
     for a in 0..NUM_SUBSWATHS {
@@ -389,77 +425,100 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
             let swth = &swath_bounds[a][i];
             // Find the mins and max
             let mut n = 0;
-            let vy_ = np.mean(y[fa:la+1, fr:lr+1], axis = 0);
-            let vx_ = np.mean(x[fa:la+1, fr:lr+1], axis = 0);
+            let vy_ = mean_ax0(y.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1);
+            
+            //np.mean(y[fa:la+1, fr:lr+1], axis = 0);
+            let vx_ = mean_ax0(x.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1);
+            //np.mean(x[fa:la+1, fr:lr+1], axis = 0);
 
             if a == 0 {
                 // EW has multiple peaks
                 
-                let Mx0 = pad + 20;
-                let Mx2 = lr - fr - pad;
+                let Mx0:usize = pad + 20;
+                let Mx2:usize = swth.lr - swth.fr - pad;
 
-                let mn0 = np.argmin(vy_[0:(Mx2-Mx0)/2]);
-                let mn1 = (Mx2-Mx0)/2 + np.argmin(vy_[(Mx2-Mx0)/2:])
-
-                Mx1 = mn0 + np.argmax(vy_[mn0:mn1])
-
-                if la - fa < 40: continue #Skip if less than 40 samples
-                for bnum in range(4): #TODO: fill
-                    step = (la+1-fa)//4
-                    if bnum == 3:
-                        lend = la+1
-                    else:
-                        lend = fa+(bnum+1)*step
-                    
-                    vy = np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
-                    vx = np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
-
-                    xvals[sn] = np.mean(vx[Mx0-bf:Mx0+bf] - vx[mn0-bf:mn0+bf])
-                    yvals[sn] = np.mean(vy[Mx0-bf:Mx0+bf] - vy[mn0-bf:mn0+bf])
-                    sn+=1
-
-                    xvals[sn] = np.mean(vx[mn0-bf:mn0+bf] - vx[Mx1-bf:Mx1+bf])
-                    yvals[sn] = np.mean(vy[mn0-bf:mn0+bf] - vy[Mx1-bf:Mx1+bf])
-                    sn+=1
-
-                    xvals[sn] = np.mean(vx[Mx1-bf:Mx1+bf] - vx[mn1-bf:mn1+bf])
-                    yvals[sn] = np.mean(vy[Mx1-bf:Mx1+bf] - vy[mn1-bf:mn1+bf])
-                    sn+=1
-
-                    xvals[sn] = np.mean(vx[mn1-bf:mn1+bf] - vx[Mx2-bf:Mx2+bf])
-                    yvals[sn] = np.mean(vy[mn1-bf:mn1+bf] - vy[Mx2-bf:Mx2+bf])
-                    sn+=1
-
-
-
-            else:
-                Mx0 = pad#TODO: fill
-                Mx1 = lr - fr - pad
-                if a == 4:
-                    Mx1 = lr - fr - 100
-                    
-                mn0 = Mx0 + np.argmin(vy_[Mx0:Mx1])
+                //let mn0:usize = Zip::indexed(vy_.slice(s![0..(Mx2-Mx0)/2])) // TODO: fill
+                //    .fold_while((0_usize, 9999999.0), |acc, ind, a| if *a <= acc.1 {(ind, *a)} else {acc} ).0;
+                let mn0:usize = argmin1(vy_.view(), 0, (Mx2-Mx0)/2);
+                //np.argmin(vy_[0:(Mx2-Mx0)/2]);
                 
-                
-                if la - fa < 40: continue #Skip if less than 40 samples
+                let mn1:usize = (Mx2-Mx0)/2 + argmin1(vy_.view(), (Mx2-Mx0)/2, vy_.dim());
 
-                for bnum in range(4):
-                    step = (la+1-fa)//4#TODO: fill
-                    if bnum == 3:
-                        lend = la+1
-                    else:
-                        lend = fa+(bnum+1)*step
-                    vy = np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
-                    vx = np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
+                    //np.argmin(vy_[(Mx2-Mx0)/2:])
 
-                    assert(not np.all(np.isnan(vy)) and not np.all(np.isnan(vx)))
-                    xvals[sn] = np.mean((vx[Mx0-bf:Mx0+bf] - vx[mn0-bf:mn0+bf]))
-                    yvals[sn] = np.mean((vy[Mx0-bf:Mx0+bf] - vy[mn0-bf:mn0+bf]))
-                    sn+=1
+                let Mx1 = mn0 + argmax1(vy_.view(), mn0, mn1);
+                    //np.argmax(vy_[mn0:mn1])
 
-                    xvals[sn] = np.mean((vx[mn0-bf:mn0+bf] - vx[Mx1-bf:Mx1+bf]))
-                    yvals[sn] = np.mean((vy[mn0-bf:mn0+bf] - vy[Mx1-bf:Mx1+bf]))
-                    sn+=1
+                if swth.la - swth.fa < 40 { continue} //Skip if less than 40 samples
+                for bnum in 0..NUM_SUBSWATHS-1{ // #TODO: fill
+                    let step = (swth.la+1-swth.fa)/4 ;
+                    let lend:usize;
+                    if bnum == 3 {
+                        lend = swth.la+1;
+                    }
+                    else {
+                        lend = swth.fa+(bnum+1)*step;
+                    }
+                    
+                    let vy = mean_ax0(y, swth.fa+bnum*step, lend, swth.fr, swth.lr+1);//np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
+                    let vx = mean_ax0(x, swth.fa+bnum*step, lend, swth.fr, swth.lr+1);//np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
 
-    return xvals, yvals
+                    xvals[sn] = mean1(vx.view(),Mx0-bf,Mx0+bf) - mean1(vx.view(),mn0-bf,mn0+bf);
+                    yvals[sn] = mean1(vy.view(),Mx0-bf,Mx0+bf) - mean1(vy.view(),mn0-bf,mn0+bf);
+                    sn+=1;
+
+                    xvals[sn] = mean1(vx.view(),mn0-bf,mn0+bf) - mean1(vx.view(),Mx1-bf,Mx1+bf);
+                    yvals[sn] = mean1(vy.view(),mn0-bf,mn0+bf) - mean1(vy.view(),Mx1-bf,Mx1+bf);
+                    sn+=1;
+
+                    xvals[sn] = mean1(vx.view(),Mx1-bf,Mx1+bf) - mean1(vx.view(),mn1-bf,mn1+bf);
+                    yvals[sn] = mean1(vy.view(),Mx1-bf,Mx1+bf) - mean1(vy.view(),mn1-bf,mn1+bf);
+                    sn+=1;
+
+                    xvals[sn] = mean1(vx.view(),mn1-bf,mn1+bf)- mean1(vx.view(),Mx2-bf,Mx2+bf);
+                    yvals[sn] = mean1(vy.view(),mn1-bf,mn1+bf) - mean1(vy.view(),Mx2-bf,Mx2+bf);
+                    sn+=1;
+
                 }
+            }
+            else {
+                let Mx0 = pad; //#TODO: fill
+                let mut Mx1 = swth.lr - swth.fr - pad;
+                if a == NUM_SUBSWATHS-1 {
+                    Mx1 = swth.lr - swth.fr - 100;
+                }
+                    
+                let mn0 = Mx0 + argmin1(vy_.view(),Mx0,Mx1);
+                
+                
+                if swth.la - swth.fa < 40 {continue;} // #Skip if less than 40 samples
+
+                for bnum in 0..NUM_SUBSWATHS-1 {
+                    let step = (swth.la+1-swth.fa)/4; //#TODO: fill
+                    let lend:usize;
+                    if bnum == 3 {
+                        lend = swth.la+1;
+                    }
+                    else {
+                        lend = swth.fa+(bnum+1)*step;
+                    }
+                    
+                    let vy = mean_ax0(y,swth.fa+bnum*step,lend, swth.fr,swth.lr+1);
+                    let vx = mean_ax0(x,swth.fa+bnum*step,lend, swth.fr,swth.lr+1);
+
+                    //assert(not np.all(np.isnan(vy)) and not np.all(np.isnan(vx)))
+                    
+                    xvals[sn] = mean1(vx.view(),Mx0-bf,Mx0+bf) - mean1(vx.view(),mn0-bf,mn0+bf);
+                    yvals[sn] = mean1(vy.view(),Mx0-bf,Mx0+bf) - mean1(vy.view(),mn0-bf,mn0+bf);
+                    sn+=1;
+
+                    xvals[sn] = mean1(vx.view(),mn0-bf,mn0+bf) - mean1(vx.view(),Mx1-bf,Mx1+bf);
+                    yvals[sn] = mean1(vy.view(),mn0-bf,mn0+bf) - mean1(vy.view(),Mx1-bf,Mx1+bf);
+                    sn+=1;
+                }
+            }
+        }
+    }
+    return (xvals, yvals);
+}
+
