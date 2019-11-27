@@ -2,6 +2,7 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2, Slice};
+use ndarray_linalg::Solve;
 use ndarray::Zip;
 use ndarray_parallel::prelude::*;
 //use rayon::prelude::*;
@@ -70,15 +71,15 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                      mu:f64,
                      gamma:f64,
                      lambda_:Array1<f64>,
-                     lambda2_:f64) {
+                     lambda2_:f64) -> Array1<f64>{
 
     // get size of equations
     let n_row_eqs = _num_row_equations(x.dim(), w, swath_bounds);
-    let n_col_eqs = _num_col_equations(swath_bounds);
+    let n_inter_eqs = _num_inter_equations(swath_bounds);
     let n_reg = _num_regularization();
-    let n_intrasubswath = _num_intrasubswath(swath_bounds);
+    let n_intrasubswath = _num_intra_equations(swath_bounds);
 
-    let n_eqs = n_row_eqs + n_col_eqs + n_reg + n_intrasubswath;
+    let n_eqs = n_row_eqs + n_inter_eqs + n_reg + n_intrasubswath;
 
     // allocate matrices/vectors
     let mut C:Array2<f64> = Array2::zeros((n_eqs, 5));
@@ -94,7 +95,7 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                         swath_bounds,
                         n_row_eqs);
 
-    _fill_col_equations(m.view_mut(),
+    _fill_inter_equations(m.view_mut(),
                         C.view_mut(),
                         x,
                         y,
@@ -103,6 +104,28 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                         n_row_eqs);
 
     
+    _fill_regularization(m.view_mut(),
+                         C.view_mut(),
+                         n_row_eqs,
+                         n_inter_eqs,
+                         lambda_.view());
+    
+    _fill_intrasubswath_equations(m.view_mut(),
+                                  C.view_mut(),
+                                  x,
+                                  y,
+                                  swath_bounds,
+                                  n_row_eqs,
+                                  n_inter_eqs,
+                                  n_reg,
+                                  gamma);
+
+    let A:Array2<f64> = C.t().dot(&C);
+    let b:Array1<f64> = C.t().dot(&m);
+
+    let k = A.solve_into(&b).unwrap();
+
+    return k;
     
 }
                      
@@ -127,7 +150,7 @@ fn _num_row_equations(shape:(usize, usize), w:&[usize], swath_bounds:&[&[SwathEl
     
     return n;
 }
-fn _num_col_equations(swath_bounds:&[&[SwathElem]]) -> usize{
+fn _num_inter_equations(swath_bounds:&[&[SwathElem]]) -> usize{
     let mut tot = 0;
 
     for a in 0..NUM_SUBSWATHS-1 {
@@ -144,7 +167,7 @@ fn _num_col_equations(swath_bounds:&[&[SwathElem]]) -> usize{
 fn _num_regularization() -> usize{
     return NUM_SUBSWATHS;
 }
-fn _num_intrasubswath(swath_bounds:&[&[SwathElem]]) -> usize{
+fn _num_intra_equations(swath_bounds:&[&[SwathElem]]) -> usize{
     let mut tot = 0;
 
     for elem in swath_bounds[0].iter() { //first subswath
@@ -207,7 +230,7 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
 
 }
 
-fn _fill_col_equations(mut m:ArrayViewMut1<f64>,
+fn _fill_inter_equations(mut m:ArrayViewMut1<f64>,
                        mut C:ArrayViewMut2<f64>,
                        x:ArrayView2<f64>,
                        y:ArrayView2<f64>,
@@ -217,7 +240,7 @@ fn _fill_col_equations(mut m:ArrayViewMut1<f64>,
 {
     let x_col = _gather_interswathcol(x, swath_bounds);
     let y_col = _gather_interswathcol(y, swath_bounds);
-    let N = _num_col_equations(swath_bounds);
+    let N = _num_inter_equations(swath_bounds);
     let mut n=0;
 
     for a in 0..NUM_SUBSWATHS-1 {
@@ -279,7 +302,7 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
     let (x_vals, y_vals) = _gather_intrasubswath(x,y, swath_bounds);
 
     let mut n = 0;
-    let N = _num_intrasubswath(swath_bounds);
+    let N = _num_intra_equations(swath_bounds);
     //kratio = np.zeros(N)
     for a in 0..NUM_SUBSWATHS {
         
@@ -378,7 +401,7 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
 
 fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Array2<f64> {
    
-    let N = _num_col_equations(swath_bounds);
+    let N = _num_inter_equations(swath_bounds);
     let mut meanvals = Array2::zeros((N,2));
 
     let mut sn = 0;
@@ -415,7 +438,7 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
     
     let pad = 60;
     let bf = 10;
-    let Nelems = _num_intrasubswath(swath_bounds);
+    let Nelems = _num_intra_equations(swath_bounds);
     let mut xvals:Array1<f64> = Array1::zeros(Nelems);
     let mut yvals:Array1<f64> = Array1::zeros(Nelems);
     let mut sn = 0;
