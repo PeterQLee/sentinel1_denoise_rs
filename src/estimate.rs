@@ -1,11 +1,11 @@
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
+use ndarray::prelude::*;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2, Slice};
 use ndarray_linalg::Solve;
 use ndarray::Zip;
-use ndarray_parallel::prelude::*;
-//use rayon::prelude::*;
+use rayon::prelude::*;
 
 
 /// Mean along first axis
@@ -123,7 +123,7 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
     let A:Array2<f64> = C.t().dot(&C);
     let b:Array1<f64> = C.t().dot(&m);
 
-    let k = A.solve_into(&b).unwrap();
+    let k = A.solve_into(b).unwrap();
 
     return k;
     

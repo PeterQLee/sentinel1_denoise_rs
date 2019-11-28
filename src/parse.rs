@@ -4,6 +4,8 @@ use quick_xml::events::Event;
 use std::str;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayView1, ArrayView2, Slice};
 use ndarray::Zip;
+use ndarray::prelude::*;
+//use ndarray::parallel::prelude::*;
 use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
 //use itertools::Itertools;
