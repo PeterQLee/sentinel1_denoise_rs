@@ -22,6 +22,15 @@ struct NoiseRangeEntry {
     values: Vec<f64>
 }
 
+
+pub struct SwathElem {
+    pub fa:usize,
+    pub la:usize,
+    pub fr:usize,
+    pub lr:usize
+}
+
+
 /* Parses a single range noise vector */
 fn range_parse_func(reader:&mut Reader<&[u8]>) -> NoiseRangeEntry {
     let mut line = 0;
@@ -498,3 +507,11 @@ impl NoiseField {
     }
 }
 
+
+impl SwathElem {
+    /// Creates an nested vector of swath elems 
+    pub fn new(filebuffer:&str) -> () { //Vec<Vec<SwathElem>> {
+        let mut reader = Reader::from_str(filebuffer);
+        
+    }
+}

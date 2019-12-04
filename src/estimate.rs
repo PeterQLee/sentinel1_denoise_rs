@@ -1,3 +1,5 @@
+
+use crate::parse::SwathElem;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
@@ -44,13 +46,13 @@ fn argmax1(x:ArrayView1<f64>, sa:usize, la:usize) -> usize {
 
 
 
-
+/*
 pub struct SwathElem {
     fa:usize,
     la:usize,
     fr:usize,
     lr:usize
-}
+}*/
 
 const EXTENT:usize = 35;
 const NUM_SUBSWATHS:usize = 5;
@@ -70,7 +72,7 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                      swath_bounds:&[&[SwathElem]],//list
                      mu:f64,
                      gamma:f64,
-                     lambda_:Array1<f64>,
+                     lambda_:&[f64],
                      lambda2_:f64) -> Array1<f64>{
 
     // get size of equations
@@ -108,7 +110,7 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                          C.view_mut(),
                          n_row_eqs,
                          n_inter_eqs,
-                         lambda_.view());
+                         lambda_);
     
     _fill_intrasubswath_equations(m.view_mut(),
                                   C.view_mut(),
@@ -282,7 +284,7 @@ fn _fill_regularization(mut m:ArrayViewMut1<f64>,
                         mut C:ArrayViewMut2<f64>,
                         n_row_eqs:usize,
                         n_col_eqs:usize,
-                        lambda_:ArrayView1<f64>) {
+                        lambda_:&[f64]) {
     // Bias all the K's towards 1.
     for i in 0..NUM_SUBSWATHS {
         m[n_row_eqs + n_col_eqs + i] = lambda_[i];
