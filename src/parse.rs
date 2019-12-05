@@ -35,84 +35,6 @@ pub struct SwathElem {
 }
 
 
-/* Parses a single range noise vector */
-fn range_parse_func(reader:&mut Reader<&[u8]>) -> NoiseRangeEntry {
-    let mut line = 0;
-    let mut buf = Vec::new();
-    enum ExtractState {Line, Pixel, Values, None};
-    let mut state:ExtractState = ExtractState::None;
-    let mut pixels:Vec<usize> = Vec::new();
-    let mut values:Vec<f64> = Vec::new();
-    loop {
-        match reader.read_event(&mut buf) {
-            // Determine the current field state
-            Ok(Event::Start(ref e)) => {
-                match e.name() {
-                    b"line" => {state = ExtractState::Line},
-                    b"pixel" => {state = ExtractState::Pixel},
-                    b"noiseRangeLut" => {state = ExtractState::Values},
-                    _ => {}
-                }
-                
-            },
-            // Read and parse the text
-            Ok(Event::Text(ref e)) =>{
-                match state {
-                    ExtractState::Line => {
-                        let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
-                        match val {
-                            Ok(v) => line = v,
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-                    },
-                    ExtractState::Pixel => {
-                        match str::from_utf8(&e.unescaped().unwrap()) {
-                            Ok(v) => {
-                                pixels = v.split(|a| a == ' ')
-                                    .map(|a| a.parse::<usize>().unwrap())
-                                    .collect();
-                            }
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-
-                    },
-                    ExtractState::Values => {
-                        match str::from_utf8(&e.unescaped().unwrap()) {
-                            Ok(v) => {
-                                values = v.split(|a| a == ' ')
-                                    .map(|a| a.parse::<f64>().unwrap())
-                                    .collect();
-                            }
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-
-                    },
-                    ExtractState::None => {
-                    }
-                }
-            }
-            // End the field state
-            Ok(Event::End(ref e)) => {
-                match e.name() {
-
-                    b"noiseRangeVector" => {break;},
-                    b"line"=> {state = ExtractState::None},
-                    b"pixel"=> {state = ExtractState::None},
-                    b"noiseRangeLut"=> {state = ExtractState::None},
-                    _ => {},
-                }
-            }
-            _ => ()
-        }
-    }
-    //println!("{}\n{:?}\n{:?}\n\n", line, pixels, values);
-    NoiseRangeEntry {
-        line: line,
-        pixels: pixels,
-        values: values
-    }
-}
-
 
 
 
@@ -128,121 +50,6 @@ struct NoiseAzimuthEntry {
     values: Vec<f64>
 }
 
-/* Parses a single range noise vector */
-fn azimuth_parse_func(reader:&mut Reader<&[u8]>) -> NoiseAzimuthEntry {
-
-    let mut buf = Vec::new();
-    enum ExtractState {Line, FirstPixel, LastPixel, FirstLine, LastLine, Values, None};
-    let mut state:ExtractState = ExtractState::None;
-    
-    let mut firstpixel:usize = 0;
-    let mut lastpixel:usize = 0;
-    let mut firstline:usize = 0;
-    let mut lastline:usize = 0;
-    let mut lines:Vec<usize> = Vec::new();
-    let mut values:Vec<f64> = Vec::new();
-    loop {
-        match reader.read_event(&mut buf) {
-            // Determine the current field state
-            Ok(Event::Start(ref e)) => {
-                match e.name() {
-                    b"line" => {state = ExtractState::Line},
-                    b"firstRangeSample" => {state = ExtractState::FirstPixel},
-                    b"lastRangeSample" => {state = ExtractState::LastPixel},
-                    b"firstAzimuthLine" => {state = ExtractState::FirstLine},
-                    b"lastAzimuthLine" => {state = ExtractState::LastLine},
-                    b"noiseAzimuthLut" => {state = ExtractState::Values},
-                    _ => {}
-                }
-                
-            },
-            // Read and parse the text
-            Ok(Event::Text(ref e)) =>{
-                match state {
-                    ExtractState::FirstPixel => {
-                        let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
-                        match val {
-                            Ok(v) => firstpixel = v,
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-                    },
-                    ExtractState::LastPixel => {
-                        let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
-                        match val {
-                            Ok(v) => lastpixel = v,
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-                    },
-
-                    ExtractState::Line => {
-                        match str::from_utf8(&e.unescaped().unwrap()) {
-                            Ok(v) => {
-                                lines = v.split(|a| a == ' ')
-                                    .map(|a| a.parse::<usize>().unwrap())
-                                    .collect();
-                            }
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-
-                    },
-                    ExtractState::FirstLine => {
-                        let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
-                        match val {
-                            Ok(v) => firstline = v,
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-                    },
-                    
-                    ExtractState::LastLine => {
-                        let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
-                        match val {
-                            Ok(v) => lastline = v,
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-                    },
-
-                    
-                    ExtractState::Values => {
-                        match str::from_utf8(&e.unescaped().unwrap()) {
-                            Ok(v) => {
-                                values = v.split(|a| a == ' ')
-                                    .map(|a| a.parse::<f64>().unwrap())
-                                    .collect();
-                            }
-                            Err(_e) => panic!("Malformed xml file")
-                        };
-
-                    },
-                    ExtractState::None => {
-                    }
-                }
-            }
-            // End the field state
-            Ok(Event::End(ref e)) => {
-                match e.name() {
-                    b"noiseAzimuthVector" => {break;},
-                    b"line"=> {state = ExtractState::None},
-                    b"firstRangeSample"=> {state = ExtractState::None},
-                    b"lastRangeSample"=> {state = ExtractState::None},
-                    b"firstAzimuthLine" => {state = ExtractState::None},
-                    b"lastAzimuthLine" => {state = ExtractState::None},
-                    b"noiseAzimuthLut"=> {state = ExtractState::None},
-                    _ => {},
-                }
-            }
-            _ => ()
-        }
-    }
-    //println!("{:?}\n{}\n{}\n{}\n{}\n{:?}\n\n", lines, firstpixel, lastpixel, firstline, lastline,  values);
-    NoiseAzimuthEntry {
-        lines: lines,
-        firstpixel: firstpixel,
-        lastpixel: lastpixel,
-        firstline:firstline,
-        lastline:lastline,
-        values: values
-    }
-}
 
 /* Seek the reader to the given "path" */
 fn seek_to_list<T, F>(path_list:&[Box<&[u8]>],
@@ -317,9 +124,9 @@ impl NoiseField {
                                        Box::new(b"noiseAzimuthVectorList"),
             ];
             
-            let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
+            let range_result = seek_to_list(&rgst, &mut reader, NoiseField::range_parse_func);
             reader = Reader::from_str(filebuffer);
-            let azimuth_result = seek_to_list(&azst, &mut reader, azimuth_parse_func);
+            let azimuth_result = seek_to_list(&azst, &mut reader, NoiseField::azimuth_parse_func);
             
             return NoiseField {
                 data:NoiseField::compute_field(range_result, azimuth_result, (9992,10400))
@@ -427,7 +234,6 @@ impl NoiseField {
 
     fn interpolate_col(az_result:Vec<NoiseAzimuthEntry>, shape:(usize, usize)) -> Array2<f64>{
         let mut arr = Array2::zeros(shape);
-        //let mut arrlist:Vec<Array1<f64>> = vec![Array1::zeros(shape.0);az_result.len()];
         let mut arrlist:Vec<Array2<f64>> = az_result
             .iter()
             .map(|a| {
@@ -509,6 +315,201 @@ impl NoiseField {
         return arr;
 
     }
+
+    /// Parses a single range noise vector
+    fn range_parse_func(reader:&mut Reader<&[u8]>) -> NoiseRangeEntry {
+        let mut line = 0;
+        let mut buf = Vec::new();
+        enum ExtractState {Line, Pixel, Values, None};
+        let mut state:ExtractState = ExtractState::None;
+        let mut pixels:Vec<usize> = Vec::new();
+        let mut values:Vec<f64> = Vec::new();
+        loop {
+            match reader.read_event(&mut buf) {
+                // Determine the current field state
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"line" => {state = ExtractState::Line},
+                        b"pixel" => {state = ExtractState::Pixel},
+                        b"noiseRangeLut" => {state = ExtractState::Values},
+                        _ => {}
+                    }
+                    
+                },
+                // Read and parse the text
+                Ok(Event::Text(ref e)) =>{
+                    match state {
+                        ExtractState::Line => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => line = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+                        ExtractState::Pixel => {
+                            match str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(v) => {
+                                    pixels = v.split(|a| a == ' ')
+                                        .map(|a| a.parse::<usize>().unwrap())
+                                        .collect();
+                                }
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+
+                        },
+                        ExtractState::Values => {
+                            match str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(v) => {
+                                    values = v.split(|a| a == ' ')
+                                        .map(|a| a.parse::<f64>().unwrap())
+                                        .collect();
+                                }
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+
+                        },
+                        ExtractState::None => {
+                        }
+                    }
+                }
+                // End the field state
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+
+                        b"noiseRangeVector" => {break;},
+                        b"line"=> {state = ExtractState::None},
+                        b"pixel"=> {state = ExtractState::None},
+                        b"noiseRangeLut"=> {state = ExtractState::None},
+                        _ => {},
+                    }
+                }
+                _ => ()
+            }
+        }
+        //println!("{}\n{:?}\n{:?}\n\n", line, pixels, values);
+        NoiseRangeEntry {
+            line: line,
+            pixels: pixels,
+            values: values
+        }
+    }
+
+    /// Parses a single range noise vector 
+    fn azimuth_parse_func(reader:&mut Reader<&[u8]>) -> NoiseAzimuthEntry {
+
+        let mut buf = Vec::new();
+        enum ExtractState {Line, FirstPixel, LastPixel, FirstLine, LastLine, Values, None};
+        let mut state:ExtractState = ExtractState::None;
+        
+        let mut firstpixel:usize = 0;
+        let mut lastpixel:usize = 0;
+        let mut firstline:usize = 0;
+        let mut lastline:usize = 0;
+        let mut lines:Vec<usize> = Vec::new();
+        let mut values:Vec<f64> = Vec::new();
+        loop {
+            match reader.read_event(&mut buf) {
+                // Determine the current field state
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"line" => {state = ExtractState::Line},
+                        b"firstRangeSample" => {state = ExtractState::FirstPixel},
+                        b"lastRangeSample" => {state = ExtractState::LastPixel},
+                        b"firstAzimuthLine" => {state = ExtractState::FirstLine},
+                        b"lastAzimuthLine" => {state = ExtractState::LastLine},
+                        b"noiseAzimuthLut" => {state = ExtractState::Values},
+                        _ => {}
+                    }
+                    
+                },
+                // Read and parse the text
+                Ok(Event::Text(ref e)) =>{
+                    match state {
+                        ExtractState::FirstPixel => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => firstpixel = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+                        ExtractState::LastPixel => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => lastpixel = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+
+                        ExtractState::Line => {
+                            match str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(v) => {
+                                    lines = v.split(|a| a == ' ')
+                                        .map(|a| a.parse::<usize>().unwrap())
+                                        .collect();
+                                }
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+
+                        },
+                        ExtractState::FirstLine => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => firstline = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+                        
+                        ExtractState::LastLine => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => lastline = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+
+                        
+                        ExtractState::Values => {
+                            match str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(v) => {
+                                    values = v.split(|a| a == ' ')
+                                        .map(|a| a.parse::<f64>().unwrap())
+                                        .collect();
+                                }
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+
+                        },
+                        ExtractState::None => {
+                        }
+                    }
+                }
+                // End the field state
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+                        b"noiseAzimuthVector" => {break;},
+                        b"line"=> {state = ExtractState::None},
+                        b"firstRangeSample"=> {state = ExtractState::None},
+                        b"lastRangeSample"=> {state = ExtractState::None},
+                        b"firstAzimuthLine" => {state = ExtractState::None},
+                        b"lastAzimuthLine" => {state = ExtractState::None},
+                        b"noiseAzimuthLut"=> {state = ExtractState::None},
+                        _ => {},
+                    }
+                }
+                _ => ()
+            }
+        }
+        //println!("{:?}\n{}\n{}\n{}\n{}\n{:?}\n\n", lines, firstpixel, lastpixel, firstline, lastline,  values);
+        NoiseAzimuthEntry {
+            lines: lines,
+            firstpixel: firstpixel,
+            lastpixel: lastpixel,
+            firstline:firstline,
+            lastline:lastline,
+            values: values
+        }
+    }
+
 }
 
 
