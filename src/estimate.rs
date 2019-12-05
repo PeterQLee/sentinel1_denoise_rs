@@ -58,11 +58,12 @@ const EXTENT:usize = 35;
 const NUM_SUBSWATHS:usize = 5;
     
 
-/// Estimates k values for image x and noise field y
+/// Estimates k values for square of image x and noise field y
+/// Assumes that x and y have already been divided by 10000.0 for scaling purposes.
 ///
 /// Arguments
 ///
-/// - `x` input hv-SAR image
+/// - `x` square of input hv-SAR image
 /// - `y` ESA calibrated noise for hv image
 /// - `w` half-period in terms of row spacing
 /// - `swath_bounds` boundaries of subswaths in col indices
@@ -206,10 +207,10 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
 
         Zip::from(m.slice_mut(s![n..n+i]))
             .and(C.slice_mut(s![n..n+i, a]))
-            .and(x_row.slice(s![n..n+1,0]))
-            .and(x_row.slice(s![n..n+1,1]))
-            .and(y_row.slice(s![n..n+1,0]))
-            .and(y_row.slice(s![n..n+1,1]))
+            .and(x_row.slice(s![n..n+i,0]))
+            .and(x_row.slice(s![n..n+i,1]))
+            .and(y_row.slice(s![n..n+i,0]))
+            .and(y_row.slice(s![n..n+i,1]))
             .apply( |m, c, x0, x1, y0, y1| {
                 let m_ = x0 - x1;
                 let c_ = y0 - y1;
@@ -362,11 +363,11 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
     //TODO: convert using zip/iterator functions.
     let mut n:usize = 0;
     let mut x_row = Array2::zeros((n_row_eqs, 2));
-    let eq_per_swath = Vec::with_capacity(NUM_SUBSWATHS);
+    let mut eq_per_swath = Vec::with_capacity(NUM_SUBSWATHS);
     for a in 0..NUM_SUBSWATHS {
         let rowlim = swath_bounds[a].iter().fold(0, |ac, y| if y.la > ac { y.la } else {ac}); // find the max row
         let half_period = w[a];
-
+        let o = n;
         for i in 0..swath_bounds[a].len() {
             let swth = &swath_bounds[a][i];
 
@@ -395,6 +396,7 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
                       
             n += swth.la - swth.fa - hf_add;
         }
+        eq_per_swath.push(n-o);
         
     }
     return (x_row, eq_per_swath);
