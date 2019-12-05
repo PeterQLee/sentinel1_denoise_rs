@@ -1,33 +1,22 @@
 extern crate denoise_engine;
 use denoise_engine::parse::{NoiseField, SwathElem};
-use denoise_engine::estimate::*;
-use std::io::prelude::*;
 use std::fs;
 use ndarray::{Array1, Array2, Array3, ArrayD};
 use hdf5;
 use hdf5::types::Array;
+//use itertools::Itertools;
+
+
 
 #[test]
-fn test_k_est() {
+fn subswath_bounds() {
     let handle = hdf5::File::open("/mnt/D2/Data/Sentinel/test_arrs.hdf5", "r").unwrap();
-    let mut x = handle.dataset("x").unwrap().read_2d().unwrap();
-    let mut y = handle.dataset("y").unwrap().read_2d().unwrap();
+    let xmlfile = fs::read_to_string("/mnt/D2/Data/Sentinel/test/S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.SAFE/annotation/s1a-ew-grd-hv-20180902t164932-20180902t165032-023522-028faa-002.xml").unwrap();
 
-    for a in x.iter_mut() {
-        *a = *a/10000.0;
-    }
-
-    for a in y.iter_mut() {
-        *a = *a/10000.0;
-    }
-
+    let (swath_bounds, w) = SwathElem::new(&xmlfile);
     let w_:Array1<i64> = handle.dataset("w").unwrap().read_1d().unwrap(); //TODO: reshape into slice
-    let mut w:Vec<usize> = Vec::new();
-    for i in 0..5{
-        w.push(w_[i] as usize);
-    }
-    let swath_bounds_:ArrayD<f64> =  handle.dataset("swath_bounds").unwrap().read_dyn().unwrap(); //TODO: reshape into nested slices
-    let mut swath_bounds:Vec<&[SwathElem]> = Vec::new();
+
+    let swath_bounds_:ArrayD<f64> = handle.dataset("swath_bounds").unwrap().read_dyn().unwrap(); //TODO: reshape into nested slices
 
     let mut sb1:Vec<SwathElem> = Vec::new();
     let mut sb2:Vec<SwathElem> = Vec::new();
@@ -64,20 +53,27 @@ fn test_k_est() {
 
     }
 
-    swath_bounds.push(&sb1);
-    swath_bounds.push(&sb2);
-    swath_bounds.push(&sb3);
-    swath_bounds.push(&sb4);
-    swath_bounds.push(&sb5);
+    for (x,y) in sb1.iter().zip(swath_bounds[0].iter()) {
+        assert!((x.fa == y.fa && x.fr == y.fr && x.la == y.la && x.lr == y.lr));
+    }
 
-    
-    let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
-    let lambda2_ = 1.0;
-    let mu = 1.7899;
-    let gamma = 2.0;
-    
-    let kvals = estimate_k_values(x.view(), y.view(),
-                                  &w, &swath_bounds,
-                                  mu, gamma, lambda_, lambda2_);
-    println!("{:?}",kvals);
+    for (x,y) in sb2.iter().zip(swath_bounds[1].iter()) {
+        assert!((x.fa == y.fa && x.fr == y.fr && x.la == y.la && x.lr == y.lr));
+    }
+
+    for (x,y) in sb3.iter().zip(swath_bounds[2].iter()) {
+        assert!((x.fa == y.fa && x.fr == y.fr && x.la == y.la && x.lr == y.lr));
+    }
+    for (x,y) in sb4.iter().zip(swath_bounds[3].iter()) {
+        assert!((x.fa == y.fa && x.fr == y.fr && x.la == y.la && x.lr == y.lr));
+    }
+
+    for (x,y) in sb5.iter().zip(swath_bounds[4].iter()) {
+        assert!((x.fa == y.fa && x.fr == y.fr && x.la == y.la && x.lr == y.lr));
+    }
+
+    for (x,y) in w.iter().zip(w_.iter()) {
+        assert!((*x as usize) == (*y as usize));
+    }
 }
+

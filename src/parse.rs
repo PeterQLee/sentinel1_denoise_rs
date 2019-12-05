@@ -11,7 +11,11 @@ use rayon::prelude::*;
 //use itertools::Itertools;
 
 use time::PreciseTime; //DEBUG
-    
+
+
+const NUM_SUBSWATHS:usize = 5;
+
+
 pub struct NoiseField {
     pub data:Array2<f64>
 }
@@ -500,7 +504,7 @@ impl NoiseField {
         }
         t1 = PreciseTime::now();
          println!("Az Second loop {}", t0.to(t1));
-
+        
         
         return arr;
 
@@ -509,9 +513,194 @@ impl NoiseField {
 
 
 impl SwathElem {
-    /// Creates an nested vector of swath elems 
-    pub fn new(filebuffer:&str) -> () { //Vec<Vec<SwathElem>> {
+    /// Creates an nested vector of swath elems and the period for each subswath
+    pub fn new(filebuffer:&str) -> (Vec<Vec<SwathElem>>, Vec<usize>) {
         let mut reader = Reader::from_str(filebuffer);
+
+        let swath_keys:[Box<&[u8]>; 3] = [Box::new(b"product"), 
+                                          Box::new(b"swathMerging"),
+                                          Box::new(b"swathMergeList")];
+
+        let burst_keys:[Box<&[u8]>; 3] = [Box::new(b"product"),
+                                             Box::new(b"antennaPattern"),
+                                             Box::new(b"antennaPatternList")];
         
+
+        
+        // get subswaths
+        let swath_bounds = seek_to_list(&swath_keys, &mut reader, SwathElem::parse_swath_elem);
+        reader = Reader::from_str(filebuffer);
+        let mut w = vec![0_usize;NUM_SUBSWATHS];
+        
+        // get number of bursts
+        let number_count = seek_to_list(&burst_keys, &mut reader, SwathElem::parse_burst);
+
+
+        let number_burst:Vec<usize> = (1..NUM_SUBSWATHS+1).map(
+            |a| number_count.iter().fold(
+                0, |acc, x| if *x == a {acc+1} else {acc}) - 1).collect(); //number of antenna elements - 1
+
+
+
+        // compute period.
+
+        for a in 0..NUM_SUBSWATHS {
+            let min_az = swath_bounds[a].iter().fold(99999, |acc, x| if x.fa <= acc {x.fa} else {acc});// min
+            let max_az = swath_bounds[a].iter().fold(0, |acc, x| if x.la >= acc {x.la} else {acc});// max
+
+            w[a] = ((max_az - min_az) / number_burst[a])/2;
+        }
+        
+
+        return (swath_bounds, w);
+    }
+
+    /// At a position, extract a single swathelem
+    fn parse_swath_elem(reader:&mut Reader<&[u8]>) -> Vec<SwathElem> {
+        let mut swathboundlist:Vec<SwathElem> = Vec::new();
+        let mut buf = Vec::new();
+        enum SwathState {Swath, FirstAzimuth, FirstRange, LastAzimuth, LastRange, None};
+        //let mut current_ss:usize = 1000; // current subswath that is being visited
+        let mut state = SwathState::None;
+
+        let mut fa:usize=99999;
+        let mut fr:usize=99999;
+        let mut la:usize=99999;
+        let mut lr:usize=99999;
+
+        loop {
+            match reader.read_event(&mut buf) {
+                // Set state to the correct mode
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = SwathState::Swath}, // change swaths
+                        b"firstAzimuthLine" => {state = SwathState::FirstAzimuth},
+                        b"firstRangeSample" => {state = SwathState::FirstRange},
+                        b"lastAzimuthLine" => {state = SwathState::LastAzimuth},
+                        b"lastRangeSample" => {state = SwathState::LastRange},
+                        _ => {}
+                    }
+                },
+
+                // Parse numeric values
+                Ok(Event::Text(ref e)) => {
+                    match state {
+                        SwathState::Swath => {
+                            /*
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap();
+                            if val.len() == 3 {
+                                let v = (val.bytes().nth(2).unwrap() - '0' as u8) as usize;
+                                current_ss = v;
+                            }
+                            else{
+                                panic!("Malformed xml file");
+                            }*/
+                        },
+                        SwathState::FirstAzimuth => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => fa = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+                        SwathState::FirstRange => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => fr = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+                        SwathState::LastAzimuth => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => la = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+                        SwathState::LastRange => {
+                            let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => lr = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        },
+
+                        SwathState::None => {}
+                    }
+                },
+
+                // Reset the state
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+                        b"swathMerge" => {break;} // End of data
+                        b"firstAzimuthLine" => {state = SwathState::None},
+                        b"firstRangeSample" => {state = SwathState::None},
+                        b"lastAzimuthLine" => {state = SwathState::None},
+                        b"lastRangeSample" => {state = SwathState::None},
+                        b"swathBounds" => {
+                            // push completed subswath
+                            swathboundlist.push(SwathElem{fa:fa, fr:fr, la:la, lr:lr}); 
+                            state = SwathState::None;
+                        },
+                        b"swath" => {state = SwathState::None}, // change swaths
+                        _ => {},
+                    }
+                },
+
+                _ => {}
+            }
+        }
+        return swathboundlist;
+    }
+
+    
+    fn parse_burst(reader:&mut Reader<&[u8]>) -> usize { //return subswath 
+        
+        let mut subswath:usize = 0;
+        let mut buf = Vec::new();
+        enum BurstState {Swath, None};
+        let mut state = BurstState::None;
+        loop {
+            match reader.read_event(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = BurstState::Swath},
+                        _ => {},
+                    }
+                }
+
+                Ok(Event::Text(ref e)) => {
+                    match state {
+                        BurstState::Swath => {
+                            match  str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(val) =>
+                                    match val.bytes().nth(2) {
+                                        Some(u) => {
+                                            let v = (u - ('0' as u8)) as usize;
+                                            subswath = v;
+                                        }
+                                        None => panic!("Malformed xml file")
+                                    }
+                                Err(_e) => panic!("Malformed xml file")
+                            }
+                        }
+                        BurstState::None => {}
+                    }
+                }
+                    
+
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = BurstState::None},
+                        b"antennaPattern" => {break;},
+                        _ => {},
+                    }
+                },
+                
+                _ => {}
+            }
+        }
+
+        subswath
     }
 }
