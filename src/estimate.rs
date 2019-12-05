@@ -137,16 +137,16 @@ fn _num_row_equations(shape:(usize, usize), w:&[usize], swath_bounds:&[&[SwathEl
     let mut n = 0;
     for a in 0..swath_bounds.len() {
         let half_period = w[a];
-        let rowlim = swath_bounds[a].iter().fold(0, |ac, y| if y.la > ac { y.la } else {ac}); // find the max row
+        let rowlim = swath_bounds[a].iter().fold(0, |ac, y| if y.la+1 > ac { y.la+1 } else {ac}); // find the max row
 
         for i in 0..swath_bounds[a].len() {
             let swth = &swath_bounds[a][i];
             let mut hf_add = 0;
-            if swth.la + half_period >= rowlim {
-                hf_add = (swth.la + half_period) - rowlim;
+            if swth.la+1 + half_period >= rowlim {
+                hf_add = (swth.la+1 + half_period) - rowlim;
             }
-            if swth.fa + hf_add > swth.la {continue;}
-            let increment = swth.la - swth.fa - hf_add;
+            if swth.fa + hf_add > swth.la+1 {continue;}
+            let increment = swth.la+1 - swth.fa - hf_add;
             n += increment;
         }
     }
@@ -158,7 +158,7 @@ fn _num_inter_equations(swath_bounds:&[&[SwathElem]]) -> usize{
 
     for a in 0..NUM_SUBSWATHS-1 {
         for swth in swath_bounds[a].iter() {
-            if swth.la - swth.fa >= 40 {
+            if swth.la+1 - swth.fa >= 40 {
                 tot+=4;
             }
         }
@@ -174,12 +174,12 @@ fn _num_intra_equations(swath_bounds:&[&[SwathElem]]) -> usize{
     let mut tot = 0;
 
     for elem in swath_bounds[0].iter() { //first subswath
-        if elem.la - elem.fa >= 40 { tot+=4*4; }
+        if elem.la+1 - elem.fa >= 40 { tot+=4*4; }
     }
 
-    for a in 1..5{
+    for a in 1..NUM_SUBSWATHS {
         for elem in swath_bounds[a].iter() {
-            if elem.la - elem.fa >= 40 {tot+=2*4}
+            if elem.la+1 - elem.fa >= 40 {tot+=2*4}
         }
     }
     
@@ -250,7 +250,7 @@ fn _fill_inter_equations(mut m:ArrayViewMut1<f64>,
         let mut n_add = 0;
         for i in 0..swath_bounds[a].len() {
             let swth = &swath_bounds[a][i];
-            if swth.la-swth.fa >= 40 {
+            if swth.la+1-swth.fa >= 40 {
                 n_add += 4;
             }
         }
@@ -313,14 +313,14 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
         if a == 0 {
             for swth in swath_bounds[0] {
                     
-                if swth.la-swth.fa >= 40 {
+                if swth.la+1-swth.fa >= 40 {
                     n_add += 4*4;
                 }
             }
         }
         else {
             for swth in swath_bounds[a] {
-                if swth.la-swth.fa >= 40 {
+                if swth.la+1-swth.fa >= 40 {
                     n_add += 2*4;
                 }
             }
@@ -365,36 +365,36 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
     let mut x_row = Array2::zeros((n_row_eqs, 2));
     let mut eq_per_swath = Vec::with_capacity(NUM_SUBSWATHS);
     for a in 0..NUM_SUBSWATHS {
-        let rowlim = swath_bounds[a].iter().fold(0, |ac, y| if y.la > ac { y.la } else {ac}); // find the max row
+        let rowlim = swath_bounds[a].iter().fold(0, |ac, y| if y.la+1 > ac { y.la+1 } else {ac}); // find the max row
         let half_period = w[a];
         let o = n;
         for i in 0..swath_bounds[a].len() {
             let swth = &swath_bounds[a][i];
 
             let mut hf_add:usize = 0;
-            if swth.la + half_period >= rowlim {
-                hf_add = (swth.la+half_period) - rowlim;
+            if swth.la+1 + half_period >= rowlim {
+                hf_add = (swth.la+1+half_period) - rowlim;
             }
-            if swth.fa + hf_add > swth.la {continue;}
-            let increment = swth.la  - swth.fa  - hf_add ;
+            if swth.fa + hf_add > swth.la+1 {continue;}
+            let increment = swth.la+1  - swth.fa  - hf_add ;
 
             //x_row[n:n+increment, 0 ] =  np.mean(x[fa:la-hf_add, fr:lr], axis = 1)
             //x_row[n:n+increment, 1 ] =  np.mean(x[fa + half_period:la + half_period - hf_add, fr:lr], axis=1)
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 0]))
-                .and(&x.slice(s![swth.fa..swth.la-hf_add, swth.fr..swth.lr]).sum_axis(Axis(1)))
+                .and(&x.slice(s![swth.fa..swth.la+1-hf_add, swth.fr..swth.lr+1]).sum_axis(Axis(1)))
                 .apply(|xr, xm| {
-                    *xr = xm/((swth.lr-swth.fr) as f64);
+                    *xr = xm/((swth.lr+1-swth.fr) as f64);
                 });
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 1]))
-                .and(&x.slice(s![swth.fa+half_period..swth.la+half_period-hf_add,
-                                 swth.fr..swth.lr]).sum_axis(Axis(1)))
+                .and(&x.slice(s![swth.fa+half_period..swth.la+1+half_period-hf_add,
+                                 swth.fr..swth.lr+1]).sum_axis(Axis(1)))
                 .apply(|xr, xm| {
-                    *xr = xm/((swth.lr-swth.fr) as f64);
+                    *xr = xm/((swth.lr+1-swth.fr) as f64);
                 });
 
                       
-            n += swth.la - swth.fa - hf_add;
+            n += swth.la+1 - swth.fa - hf_add;
         }
         eq_per_swath.push(n-o);
         
@@ -412,7 +412,7 @@ fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Arr
     for a in 0 .. NUM_SUBSWATHS-1 {
         for i in 0..swath_bounds[a].len() { 
             let swth = &swath_bounds[a][i];
-            if swth.la - swth.fa < 40 { continue}
+            if swth.la+1 - swth.fa < 40 { continue}
             for bnum in 0..4 {
                 let step = (swth.la+1-swth.fa)/4;
                 let lend:usize;
@@ -423,9 +423,9 @@ fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Arr
                     lend = swth.fa+(bnum+1)*step;
                 }
 
-                meanvals[(sn,0)] = x.slice(s![swth.fa + bnum*step.. lend, swth.lr-EXTENT..swth.lr]).sum()/
+                meanvals[(sn,0)] = x.slice(s![swth.fa + bnum*step.. lend, swth.lr+1-EXTENT..swth.lr+1]).sum()/
                     ( ((lend-(swth.fa+bnum*step)) as f64 )
-                        * (swth.lr-(swth.lr-EXTENT)) as f64);
+                        * (swth.lr+1-(swth.lr+1-EXTENT)) as f64);
                 
                 meanvals[(sn,1)] = x.slice(s![swth.fa + bnum*step.. lend, swth.lr+1..swth.lr+1+EXTENT]).sum() /
                     ( ((lend - (swth.fa + bnum*step)) as f64 )
@@ -462,7 +462,7 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
                 // EW has multiple peaks
                 
                 let Mx0:usize = pad + 20;
-                let Mx2:usize = swth.lr - swth.fr - pad;
+                let Mx2:usize = swth.lr+1 - swth.fr - pad;
 
                 //let mn0:usize = Zip::indexed(vy_.slice(s![0..(Mx2-Mx0)/2])) // TODO: fill
                 //    .fold_while((0_usize, 9999999.0), |acc, ind, a| if *a <= acc.1 {(ind, *a)} else {acc} ).0;
@@ -476,7 +476,7 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
                 let Mx1 = mn0 + argmax1(vy_.view(), mn0, mn1);
                     //np.argmax(vy_[mn0:mn1])
 
-                if swth.la - swth.fa < 40 { continue} //Skip if less than 40 samples
+                if swth.la+1 - swth.fa < 40 { continue} //Skip if less than 40 samples
                 for bnum in 0..NUM_SUBSWATHS-1{ // #TODO: fill
                     let step = (swth.la+1-swth.fa)/4 ;
                     let lend:usize;
@@ -510,15 +510,15 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
             }
             else {
                 let Mx0 = pad; //#TODO: fill
-                let mut Mx1 = swth.lr - swth.fr - pad;
+                let mut Mx1 = swth.lr+1 - swth.fr - pad;
                 if a == NUM_SUBSWATHS-1 {
-                    Mx1 = swth.lr - swth.fr - 100;
+                    Mx1 = swth.lr+1 - swth.fr - 100;
                 }
                     
                 let mn0 = Mx0 + argmin1(vy_.view(),Mx0,Mx1);
                 
                 
-                if swth.la - swth.fa < 40 {continue;} // #Skip if less than 40 samples
+                if swth.la+1 - swth.fa < 40 {continue;} // #Skip if less than 40 samples
 
                 for bnum in 0..NUM_SUBSWATHS-1 {
                     let step = (swth.la+1-swth.fa)/4; //#TODO: fill

@@ -4,3 +4,4 @@ extern crate ndarray_linalg;
 extern crate openblas_src;
 pub mod parse;
 pub mod estimate;
+pub mod apply;
