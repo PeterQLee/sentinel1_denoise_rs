@@ -51,7 +51,7 @@ struct NoiseAzimuthEntry {
 }
 
 
-/* Seek the reader to the given "path" */
+/// Seek the reader to the given "path" 
 fn seek_to_list<T, F>(path_list:&[Box<&[u8]>],
                    reader:& mut Reader<&[u8]>,
                    parse_func:F)
