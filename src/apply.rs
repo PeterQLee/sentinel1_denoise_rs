@@ -36,3 +36,29 @@ pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
     }
 }
 
+
+
+pub fn prep_measurement(x:ArrayView2<u16>, mut y:ArrayViewMut2<f64>) -> Array2<f64>{
+    let mut result:Array2<f64> = Array2::zeros(x.dim());
+
+    Zip::from(&mut result)
+        .and(x)
+        .apply(|a,b| *a = ((*b as f64) * (*b as f64))/10000.0);
+
+    Zip::from(&mut y)
+        .apply(|a| *a = *a/10000.0);
+               
+    return result;
+}
+
+pub fn restore_scale(mut x:ArrayViewMut2<f64>, mut y:ArrayViewMut2<f64>)  {
+    Zip::from(&mut x)
+        .apply(|a| *a = (*a)*10000.0);
+
+    Zip::from(&mut y)
+        .apply(|a| *a = (*a)*10000.0);
+    
+}
+
+
+

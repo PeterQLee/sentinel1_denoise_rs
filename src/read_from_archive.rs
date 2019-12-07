@@ -197,7 +197,8 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
                             match tiff_result {
                                 Ok(dec_result) => {
                                     if let DecodingResult::U16(dvec) = dec_result {
-                                        measurement_array = Some(Array::from_shape_vec((x as usize,y as usize), dvec).unwrap());
+                                        //measurement_array = Some(Array::from_shape_vec((x as usize,y as usize), dvec).unwrap().reversed_axes());
+                                        measurement_array = Some(Array::from_shape_vec((y as usize,x as usize), dvec).unwrap());
                                     }
                                     else {
                                         println!("The tiff file is not encoded properly (Bitdepth)."); return None;
