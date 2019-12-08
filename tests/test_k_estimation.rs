@@ -13,13 +13,13 @@ fn test_k_est() {
     let mut x = handle.dataset("x").unwrap().read_2d().unwrap();
     let mut y = handle.dataset("y").unwrap().read_2d().unwrap();
 
-    for a in x.iter_mut() {
-        *a = *a/10000.0;
-    }
+    // for a in x.iter_mut() {
+    //     *a = *a/10000.0;
+    // }
 
-    for a in y.iter_mut() {
-        *a = *a/10000.0;
-    }
+    // for a in y.iter_mut() {
+    //     *a = *a/10000.0;
+    // }
 
     let w_:Array1<i64> = handle.dataset("w").unwrap().read_1d().unwrap(); //TODO: reshape into slice
     let mut w:Vec<usize> = Vec::new();

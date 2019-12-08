@@ -6,6 +6,7 @@ use std::str;
 use ndarray::prelude::*;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2, Slice};
 use ndarray_linalg::Solve;
+use ndarray_parallel::prelude::*;
 use ndarray::Zip;
 use rayon::prelude::*;
 
@@ -56,6 +57,7 @@ pub struct SwathElem {
 
 const EXTENT:usize = 35;
 const NUM_SUBSWATHS:usize = 5;
+const NORM:f64 = 10000.0;
     
 
 /// Estimates k values for square of image x and noise field y
@@ -211,9 +213,9 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
             .and(x_row.slice(s![n..n+i,1]))
             .and(y_row.slice(s![n..n+i,0]))
             .and(y_row.slice(s![n..n+i,1]))
-            .apply( |m, c, x0, x1, y0, y1| {
-                let m_ = x0 - x1;
-                let c_ = y0 - y1;
+            .par_apply( |m, c, x0, x1, y0, y1| {
+                let m_ = (x0) - (x1);
+                let c_ = (y0) - (y1);
                 let kratio = c_*m_/(c_*c_);
                 if kratio >= 0.0 && kratio <=2.5 {
                     *m = m_;
@@ -378,19 +380,17 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
             if swth.fa + hf_add > swth.la+1 {continue;}
             let increment = swth.la+1  - swth.fa  - hf_add ;
 
-            //x_row[n:n+increment, 0 ] =  np.mean(x[fa:la-hf_add, fr:lr], axis = 1)
-            //x_row[n:n+increment, 1 ] =  np.mean(x[fa + half_period:la + half_period - hf_add, fr:lr], axis=1)
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 0]))
                 .and(&x.slice(s![swth.fa..swth.la+1-hf_add, swth.fr..swth.lr+1]).sum_axis(Axis(1)))
-                .apply(|xr, xm| {
-                    *xr = xm/((swth.lr+1-swth.fr) as f64);
+                .par_apply(|xr, xm| {
+                    *xr = xm/((swth.lr+1-swth.fr) as f64)/NORM;
                 });
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 1]))
                 .and(&x.slice(s![swth.fa+half_period..swth.la+1+half_period-hf_add,
                                  swth.fr..swth.lr+1]).sum_axis(Axis(1)))
-                .apply(|xr, xm| {
-                    *xr = xm/((swth.lr+1-swth.fr) as f64);
+                .par_apply(|xr, xm| {
+                    *xr = xm/((swth.lr+1-swth.fr) as f64)/NORM;
                 });
 
                       
@@ -425,11 +425,11 @@ fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Arr
 
                 meanvals[(sn,0)] = x.slice(s![swth.fa + bnum*step.. lend, swth.lr+1-EXTENT..swth.lr+1]).sum()/
                     ( ((lend-(swth.fa+bnum*step)) as f64 )
-                        * (swth.lr+1-(swth.lr+1-EXTENT)) as f64);
+                        * (swth.lr+1-(swth.lr+1-EXTENT)) as f64)/NORM;
                 
                 meanvals[(sn,1)] = x.slice(s![swth.fa + bnum*step.. lend, swth.lr+1..swth.lr+1+EXTENT]).sum() /
                     ( ((lend - (swth.fa + bnum*step)) as f64 )
-                       * (swth.lr+1+EXTENT - (swth.lr+1)) as f64);
+                       * (swth.lr+1+EXTENT - (swth.lr+1)) as f64)/NORM;
             
                 sn+=1;
             }
@@ -452,10 +452,10 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
             let swth = &swath_bounds[a][i];
             // Find the mins and max
             let mut n = 0;
-            let vy_ = mean_ax0(y.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1);
+            let vy_ = mean_ax0(y.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1)/NORM;
             
             //np.mean(y[fa:la+1, fr:lr+1], axis = 0);
-            let vx_ = mean_ax0(x.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1);
+            let vx_ = mean_ax0(x.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1)/NORM;
             //np.mean(x[fa:la+1, fr:lr+1], axis = 0);
 
             if a == 0 {
@@ -473,7 +473,7 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
 
                     //np.argmin(vy_[(Mx2-Mx0)/2:])
 
-                let Mx1 = mn0 + argmax1(vy_.view(), mn0, mn1);
+                let Mx1:usize = mn0 + argmax1(vy_.view(), mn0, mn1);
                     //np.argmax(vy_[mn0:mn1])
 
                 if swth.la+1 - swth.fa < 40 { continue} //Skip if less than 40 samples
@@ -487,8 +487,8 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
                         lend = swth.fa+(bnum+1)*step;
                     }
                     
-                    let vy = mean_ax0(y, swth.fa+bnum*step, lend, swth.fr, swth.lr+1);//np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
-                    let vx = mean_ax0(x, swth.fa+bnum*step, lend, swth.fr, swth.lr+1);//np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
+                    let vy = mean_ax0(y, swth.fa+bnum*step, lend, swth.fr, swth.lr+1)/NORM;//np.mean(y[fa+bnum*step:lend, fr:lr+1], axis = 0)
+                    let vx = mean_ax0(x, swth.fa+bnum*step, lend, swth.fr, swth.lr+1)/NORM;//np.mean(x[fa+bnum*step:lend, fr:lr+1], axis = 0)
 
                     xvals[sn] = mean1(vx.view(),Mx0-bf,Mx0+bf) - mean1(vx.view(),mn0-bf,mn0+bf);
                     yvals[sn] = mean1(vy.view(),Mx0-bf,Mx0+bf) - mean1(vy.view(),mn0-bf,mn0+bf);
@@ -530,8 +530,8 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
                         lend = swth.fa+(bnum+1)*step;
                     }
                     
-                    let vy = mean_ax0(y,swth.fa+bnum*step,lend, swth.fr,swth.lr+1);
-                    let vx = mean_ax0(x,swth.fa+bnum*step,lend, swth.fr,swth.lr+1);
+                    let vy = mean_ax0(y,swth.fa+bnum*step,lend, swth.fr,swth.lr+1)/NORM;
+                    let vx = mean_ax0(x,swth.fa+bnum*step,lend, swth.fr,swth.lr+1)/NORM;
 
                     //assert(not np.all(np.isnan(vy)) and not np.all(np.isnan(vx)))
                     

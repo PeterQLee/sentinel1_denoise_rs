@@ -263,7 +263,7 @@ impl NoiseField {
                 // extrapolate
                 if lowerline != first_line {
                     slope = (az.values[1]-first_value)/(az.lines[1] as f64 -first_line as f64);
-                    for i in lowerline..first_line {
+                    for i in lowerline..first_line+1 {
                         for j in 0..upperpixel-lowerpixel+1 {
                             val[(i-lowerline,j)] = slope * (i as f64 -first_line as f64) + first_value;
                         }
