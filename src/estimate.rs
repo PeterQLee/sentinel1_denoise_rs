@@ -213,8 +213,8 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
             .and(x_row.slice(s![n..n+i,1]))
             .and(y_row.slice(s![n..n+i,0]))
             .and(y_row.slice(s![n..n+i,1]))
-            //.par_apply( |m, c, x0, x1, y0, y1| {
-            .apply( |m, c, x0, x1, y0, y1| {
+            //.apply( |m, c, x0, x1, y0, y1| {
+            .par_apply( |m, c, x0, x1, y0, y1| {
                 let m_ = (x0) - (x1);
                 let c_ = (y0) - (y1);
                 let kratio = c_*m_/(c_*c_);
@@ -383,16 +383,16 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 0]))
                 .and(&x.slice(s![swth.fa..swth.la+1-hf_add, swth.fr..swth.lr+1]).sum_axis(Axis(1)))
-                //.par_apply(|xr, xm| {
-                .apply(|xr, xm| {
+                .par_apply(|xr, xm| {
+                //.apply(|xr, xm| {
                     *xr = xm/((swth.lr+1-swth.fr) as f64)/NORM;
                 });
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 1]))
                 .and(&x.slice(s![swth.fa+half_period..swth.la+1+half_period-hf_add,
                                  swth.fr..swth.lr+1]).sum_axis(Axis(1)))
-                //.par_apply(|xr, xm|{
-                .apply(|xr, xm| {
+                .par_apply(|xr, xm|{
+                //.apply(|xr, xm| {
                     *xr = xm/((swth.lr+1-swth.fr) as f64)/NORM;
                 });
 

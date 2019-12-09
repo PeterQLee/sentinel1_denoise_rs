@@ -4,11 +4,11 @@ version = "0.1.0"
 authors = ["PeterQLee <leep1995@gmail.com>"]
 edition = "2018"
 
+
 [dependencies]
 #blas = "0.19"
 #lapacke = "*"
-
-#openblas-src = "0.5"
+openblas-src = "0.5"
 #lapack-sys = {version = "0.12.1", features=["intel-mkl"]}
 quick-xml = "0.14.0"
 ndarray = "0.12.1"
@@ -20,16 +20,15 @@ hdf5 = "0.5.1"
 zip = "0.5.3"
 regex = "1.3.1"
 tiff = "0.4.0"
-
+libc = "*"
 
 [lib]
+crate-type = ["staticlib"]
 name = "denoise_engine"
 path = "src/lib.rs"
 
-[[bin]]
-name = "noise_to_tiff"
-path = "src/noise_to_tiff.rs"
+#[[bin]]
+#name = "noise_to_tiff"
+#path = "src/noise_to_tiff.rs"
 
 
-[[bin.dependencies]]
-openblas-src = "0.5"

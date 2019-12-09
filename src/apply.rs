@@ -32,7 +32,7 @@ pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
             // apply the swath scaling
             Zip::from(&mut x.slice_mut(s![swth.fa..swth.la+1, swth.fr..swth.lr+1]))
                 .and(y.slice(s![swth.fa..swth.la+1, swth.fr..swth.lr+1]))
-                .apply(|x_, y_| {
+                .par_apply(|x_, y_| {
                     *x_ = *x_ - ks*y_;
                 });
         }
