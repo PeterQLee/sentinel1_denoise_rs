@@ -156,7 +156,7 @@ impl NoiseField {
         Zip::from(&mut arr)
             .and(&rgarr)
             .and(&azarr)
-        //.par_apply(|a, &rg, &az| {
+        //    .apply(|a, &rg, &az| {
             .par_apply(|a, &rg, &az| {
                 *a = rg*az;
             });

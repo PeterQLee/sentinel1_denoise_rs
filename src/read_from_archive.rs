@@ -139,11 +139,11 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
             match sentid {
                 Some(id) => {
                     // generate the matching xml files for the calibration files we want.
-                    println!("{:?}", id);
+
                     let crosspol_anno = id.create_crosspol_annotation();
                     let crosspol_noise = id.create_crosspol_noise();
                     let crosspol_measurement = id.create_crosspol_measurement();
-                    println!("annofile: {}", crosspol_anno);
+
 
                     let mut swath_bounds:Option<Vec<Vec<SwathElem>>> = None;
                     let mut w:Option<Vec<usize>> = None;
@@ -152,11 +152,10 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
                     
                     for i in 0..ziparch.len() {
                         let mut file = ziparch.by_index(i).unwrap();
-                        println!("{}",file.name());
+
 
                         // Get swath bounds and period from anno file
                         if file.name() == crosspol_anno {
-                            println!("found crosspol_anno");
                             let mut buffer = String::new();
                             let xmldata = file.read_to_string(&mut buffer).unwrap();
                             let k = SwathElem::new(&buffer);
@@ -167,7 +166,6 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
 
                         // Get noise from noise calibration file.
                         else if file.name() == crosspol_noise {
-                            println!("found crosspol_noise");
                             let mut buffer = String::new();
                             let xmldata = file.read_to_string(&mut buffer).unwrap();
                             noisefield = Some(NoiseField::new(&buffer, true));
@@ -176,7 +174,6 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
 
                         // Get noise array from tiff file.
                         else if file.name() == crosspol_measurement {
-                            println!("found crosspol_measurement");
                             let mut buffer = Vec::new();
                             let xmldata = file.read_to_end(&mut buffer);
                             let virt_file = Cursor::new(buffer);
