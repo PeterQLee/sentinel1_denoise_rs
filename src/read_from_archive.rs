@@ -19,6 +19,24 @@ struct SentinelFormatId {
     lower_dateid:String
 }
 
+pub enum SentinelArchiveOutput{
+    CrossPolOutput (
+        Vec<Vec<SwathElem>>,
+        Vec<usize>,
+        NoiseField,
+        Array2<u16>
+    ),
+    BothPolOutput (
+        Vec<Vec<SwathElem>>,
+        Vec<usize>,
+        NoiseField,
+        Array2<u16>,
+        Array2<u16>
+    )
+}
+
+ 
+
 impl SentinelFormatId {
     fn create_crosspol_annotation(&self) -> String {
         let polid;
@@ -71,7 +89,25 @@ impl SentinelFormatId {
         }
         return format!("S1{up_sentid}_EW_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/measurement/s1{sentid}-ew-grd-{polid}-{lower_dateid}-002.tiff", up_sentid = up_sentid, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
     }
-    
+
+
+    fn create_copol_measurement(&self) -> String {
+        let polid;
+        let upemit;
+        
+        match self.polarization.as_str() {
+            "h" => {polid = "hh"; upemit = "H"},
+            _ => {polid = "vv"; upemit = "V"}
+        }
+
+        let up_sentid;
+        match self.sentid.as_str() {
+            "a" => up_sentid = "A",
+            _ =>  up_sentid = "B"
+        }
+        return format!("S1{up_sentid}_EW_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/measurement/s1{sentid}-ew-grd-{polid}-{lower_dateid}-001.tiff", up_sentid = up_sentid, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
+    }
+
 }
 
 /// Get the dateid prefix for the relevant files.
@@ -115,7 +151,7 @@ fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
 }
 
 /// Gets the original 16-bit image and noise field from a given path.
-pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usize>, NoiseField, Array2<u16>)> {
+pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelArchiveOutput> {
     let file_h = File::open(path);
 
     match file_h {
@@ -127,7 +163,7 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
             for i in 0..ziparch.len() {
                 let filename = ziparch.by_index(i).unwrap();
 
-                match (get_id_prefix(filename.name())) {
+                match get_id_prefix(filename.name()) {
                     Some(id_result) => {
                         sentid = Some(id_result);
                         break;
@@ -143,12 +179,14 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
                     let crosspol_anno = id.create_crosspol_annotation();
                     let crosspol_noise = id.create_crosspol_noise();
                     let crosspol_measurement = id.create_crosspol_measurement();
+                    let copol_measurement = id.create_copol_measurement();
 
 
                     let mut swath_bounds:Option<Vec<Vec<SwathElem>>> = None;
                     let mut w:Option<Vec<usize>> = None;
                     let mut noisefield:Option<NoiseField> = None;
                     let mut measurement_array:Option<Array2<u16>> = None;
+                    let mut copol_array:Option<Array2<u16>> = None;
                     
                     for i in 0..ziparch.len() {
                         let mut file = ziparch.by_index(i).unwrap();
@@ -172,7 +210,7 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
                             
                         }
 
-                        // Get noise array from tiff file.
+                        // Get crosspol array from tiff file.
                         else if file.name() == crosspol_measurement {
                             let mut buffer = Vec::new();
                             let xmldata = file.read_to_end(&mut buffer);
@@ -194,7 +232,6 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
                             match tiff_result {
                                 Ok(dec_result) => {
                                     if let DecodingResult::U16(dvec) = dec_result {
-                                        //measurement_array = Some(Array::from_shape_vec((x as usize,y as usize), dvec).unwrap().reversed_axes());
                                         measurement_array = Some(Array::from_shape_vec((y as usize,x as usize), dvec).unwrap());
                                     }
                                     else {
@@ -203,13 +240,69 @@ pub fn get_data_from_zip_path(path:&str) -> Option<(Vec<Vec<SwathElem>>, Vec<usi
                                 },
                                 Err(_e) => {println!("The tiff file is not encoded properly"); return None;}
                             }
-                            
                         }
+
+                        // Get crosspol array from tiff file.
+                        else if bothpol_flag && file.name() == copol_measurement {
+                            let mut buffer = Vec::new();
+                            let xmldata = file.read_to_end(&mut buffer);
+                            let virt_file = Cursor::new(buffer);
+                            let mut tiff_file = Decoder::new(virt_file).unwrap();
+
+                            let tiff_dims = tiff_file.dimensions();
+                            let (x,y):(u32,u32);
+                            match tiff_dims {
+                                Ok(t) => {x = t.0; y = t.1;}
+                                Err(_e) => {
+                                    println!("The tiff file is not encoded properly");
+                                    return None;
+                                }
+                            }
+                            
+                            
+                            let tiff_result = tiff_file.read_image();
+                            match tiff_result {
+                                Ok(dec_result) => {
+                                    if let DecodingResult::U16(dvec) = dec_result {
+                                        copol_array = Some(Array::from_shape_vec((y as usize,x as usize), dvec).unwrap());
+                                    }
+                                    else {
+                                        println!("The tiff file is not encoded properly (Bitdepth)."); return None;
+                                    }
+                                },
+                                Err(_e) => {println!("The tiff file is not encoded properly"); return None;}
+                            }
+                        }
+
                     }
 
-                    // Return the result.
-                    if swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() {
-                        return Some((swath_bounds.unwrap(), w.unwrap(), noisefield.unwrap(), measurement_array.unwrap()));
+                    // Return the crosspol result only.
+                    if !bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() {
+                        return Some(
+                            SentinelArchiveOutput::CrossPolOutput (
+                                swath_bounds.unwrap(),
+                                w.unwrap(),
+                                noisefield.unwrap(),
+                                measurement_array.unwrap()
+                            )
+                        );
+                        //return Some((swath_bounds.unwrap(), w.unwrap(), noisefield.unwrap(), measurement_array.unwrap()));
+                    }
+
+
+                    // Both crosspol and co polarization
+                    else if bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() && copol_array.is_some() {
+                        return Some(
+                            SentinelArchiveOutput::BothPolOutput (
+                                swath_bounds.unwrap(),
+                                w.unwrap(),
+                                noisefield.unwrap(),
+                                measurement_array.unwrap(),
+                                copol_array.unwrap()
+                            )
+                        );
+
+                    
                     }
 
                     println!("One or more files not found");

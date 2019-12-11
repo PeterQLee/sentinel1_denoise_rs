@@ -51,9 +51,17 @@ pub fn prep_measurement(x:ArrayView2<u16>, mut y:ArrayViewMut2<f64>) -> Array2<f
     return result;
 }
 
-pub fn restore_scale(mut x:ArrayViewMut2<f64>, mut y:ArrayViewMut2<f64>)  {
-    //Zip::from(&mut x)
-    //    .apply(|a| *a = (*a)*10000.0);
+pub fn restore_scale(mut x:ArrayViewMut2<f64>) {//, mut y:ArrayViewMut2<f64>)  {
+    Zip::from(&mut x)
+        .apply(|a| {
+            if (*a).is_sign_negative() {
+                *a = (*a).abs().sqrt() * (-1.0);
+            }
+            else {
+                *a = (*a).sqrt();
+            }
+        });
+              
 
     //Zip::from(&mut y)
      //   .apply(|a| *a = (*a)*10000.0);
@@ -62,3 +70,20 @@ pub fn restore_scale(mut x:ArrayViewMut2<f64>, mut y:ArrayViewMut2<f64>)  {
 
 
 
+pub fn convert_to_u16_f32(x:ArrayView2<u16>) -> Array2<f32>{
+    let mut outarr:Array2<f32> = Array2::zeros(x.dim());
+
+    Zip::from(&mut outarr)
+        .and(x)
+        .apply(|a,b| *a = *b as f32);
+    return outarr;
+}
+
+pub fn convert_to_f64_f32(x:ArrayView2<f64>) -> Array2<f32>{
+    let mut outarr:Array2<f32> = Array2::zeros(x.dim());
+
+    Zip::from(&mut outarr)
+        .and(x)
+        .apply(|a,b| *a = *b as f32);
+    return outarr;
+}

@@ -10,8 +10,6 @@ use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
 //use itertools::Itertools;
 
-use time::PreciseTime; //DEBUG
-
 
 const NUM_SUBSWATHS:usize = 5;
 
@@ -170,7 +168,7 @@ impl NoiseField {
         
         let mut arrlist:Vec<Array1<f64>> = vec![Array1::zeros(shape.1);rg_result.len()]; //this is really bad
 
-        let mut t0 = PreciseTime::now();
+
         arrlist.par_iter_mut()
             .zip(rg_result.par_iter())
             .for_each(|a|{
@@ -193,20 +191,18 @@ impl NoiseField {
                         
                 }
             });
-        let mut t1 = PreciseTime::now();
 
 
-        println!("First loop {}", t0.to(t1));
 
-        t0 = PreciseTime::now();
+
+
         //copy the data in the right rows
         for (e,rg) in rg_result.iter().enumerate() {
             arr.index_axis_mut(Axis(0),rg.line).assign(&arrlist[e]);
         }
-        t1 = PreciseTime::now();
-        println!("Second loop {}", t0.to(t1));
 
-        t0 = PreciseTime::now();
+
+
         //interpolate between the rows
         let mut rg_iter = rg_result.iter();
         let mut start:usize = rg_iter.next().unwrap().line;
@@ -225,9 +221,8 @@ impl NoiseField {
             start = end;
         }
         
-        t1 = PreciseTime::now();
-        println!("Third loop {}", t0.to(t1));
-        println!("{:?}", arr[(0,0)]);
+
+
         
         return arr;
     }
@@ -239,7 +234,7 @@ impl NoiseField {
             .map(|a| {
                 Array2::zeros((a.lastline-a.firstline+1, a.lastpixel-a.firstpixel+1))
             }).collect();
-        let mut t0 = PreciseTime::now();
+
 
         arrlist.par_iter_mut()
             .zip(az_result.par_iter())
@@ -297,10 +292,8 @@ impl NoiseField {
                 }
                 
             });
-        let mut t1 = PreciseTime::now();
-        println!("Az First loop {}", t0.to(t1));
         // fill in the gaps (bottleneck)
-        t0 = PreciseTime::now();
+
         for (colarr, az) in arrlist.iter().zip(az_result.iter()){
             let mut slice = arr.slice_mut(s![az.firstline..az.lastline+1, az.firstpixel..az.lastpixel+1]);
             //let bcast = colarr.broadcast((az.lastpixel+1-az.firstpixel,shape.0)).unwrap();
@@ -308,8 +301,7 @@ impl NoiseField {
             slice.assign(&colarr);
 
         }
-        t1 = PreciseTime::now();
-         println!("Az Second loop {}", t0.to(t1));
+
         
         
         return arr;
@@ -386,7 +378,7 @@ impl NoiseField {
                 _ => ()
             }
         }
-        //println!("{}\n{:?}\n{:?}\n\n", line, pixels, values);
+
         NoiseRangeEntry {
             line: line,
             pixels: pixels,
@@ -499,7 +491,7 @@ impl NoiseField {
                 _ => ()
             }
         }
-        //println!("{:?}\n{}\n{}\n{}\n{}\n{:?}\n\n", lines, firstpixel, lastpixel, firstline, lastline,  values);
+
         NoiseAzimuthEntry {
             lines: lines,
             firstpixel: firstpixel,

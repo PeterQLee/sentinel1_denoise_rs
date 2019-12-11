@@ -29,30 +29,36 @@ fn main() {
     let mu = 1.7899;
     let gamma = 2.0;
 
-    let zipval = get_data_from_zip_path(zip_path);
+    let zipval = get_data_from_zip_path(zip_path, false);
 
 
     match zipval {
-        Some((swath_bounds, w, mut noisefield, x16)) => {
-            println!("Load successful");
-            let mut x_:Option<Array2<f64>> = None;
-            {
-                let mut y = noisefield.data.view_mut();
-                x_ = Some(prep_measurement(x16.view(), y));
-            }
-            let mut x = x_.unwrap();
+        Some(archout) => {
+            match archout {
+                SentinelArchiveOutput::CrossPolOutput(swath_bounds, w, mut noisefield, x16) => {
 
-            let sb:Vec<&[SwathElem]> = swath_bounds.iter().map(|a| a.as_slice()).collect();
+                    println!("Load successful");
+                    let mut x_:Option<Array2<f64>> = None;
+                    {
+                        let mut y = noisefield.data.view_mut();
+                        x_ = Some(prep_measurement(x16.view(), y));
+                    }
+                    let mut x = x_.unwrap();
+                    
+                    let sb:Vec<&[SwathElem]> = swath_bounds.iter().map(|a| a.as_slice()).collect();
+                    
+                    let k = estimate_k_values(x.view(), noisefield.data.view(), &w, &sb, mu, gamma, lambda_, lambda2_);
+                    println!("k={:?}", k);
             
-            let k = estimate_k_values(x.view(), noisefield.data.view(), &w, &sb, mu, gamma, lambda_, lambda2_);
-            println!("k={:?}", k);
-            
-            {
-                let mut y = noisefield.data.view_mut();
-                restore_scale(x.view_mut(), y);
+                    {
+                        let mut y = noisefield.data.view_mut();
+                        restore_scale(x.view_mut(), y);
+                    }
+                    apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
+                    println!("{}", x[(0,0)]);
+                }
+                _ => {},
             }
-            apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
-            println!("{}", x[(0,0)]);
             
         }
         None => {

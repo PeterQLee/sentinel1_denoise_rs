@@ -5,4 +5,4 @@ typedef struct {
   int cols;
 } OutArr;
 
-extern OutArr denoise_zip (char *path, int pathlen);
+extern "C" OutArr denoise_zip (char *path, int pathlen);
