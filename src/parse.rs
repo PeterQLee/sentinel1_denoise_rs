@@ -109,27 +109,30 @@ impl NoiseField {
     /// * `filebuffer` - The buffer holding the contents of the noise cal xml file
     ///
     /// * `two_eight_flag` - Flag indicates if product is from IPF 2.8 or later
-    pub fn new(filebuffer:&str, two_eight_flag:bool) -> NoiseField {
+    pub fn new(filebuffer:&str, shape:(usize, usize), two_eight_flag:bool) -> NoiseField {
         let mut reader = Reader::from_str(filebuffer);
 
         //if two_eight_flag {
         
-            let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
-                                       Box::new(b"noiseRangeVectorList"),
-            ];
-            
-            let azst:[Box<&[u8]>;2] = [Box::new(b"noise"),
-                                       Box::new(b"noiseAzimuthVectorList"),
-            ];
-            
-            let range_result = seek_to_list(&rgst, &mut reader, NoiseField::range_parse_func);
-            reader = Reader::from_str(filebuffer);
-            let azimuth_result = seek_to_list(&azst, &mut reader, NoiseField::azimuth_parse_func);
-            
-            return NoiseField {
-                data:NoiseField::compute_field(range_result, azimuth_result, (9992,10400))
-            };
-       //     }
+        let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+                                   Box::new(b"noiseRangeVectorList"),
+        ];
+        
+        let azst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+                                   Box::new(b"noiseAzimuthVectorList"),
+        ];
+        
+ 
+        let range_result = seek_to_list(&rgst, &mut reader, NoiseField::range_parse_func);
+        reader = Reader::from_str(filebuffer);
+        let azimuth_result = seek_to_list(&azst, &mut reader, NoiseField::azimuth_parse_func);
+        
+        return NoiseField {
+            data:NoiseField::compute_field(range_result, azimuth_result, shape)
+        };
+
+        
+        //     }
        // }
         
       //  else {
@@ -143,6 +146,9 @@ impl NoiseField {
             
     }
 
+
+
+    
     fn old_compute_field(rg_result:Vec<NoiseRangeEntry>) {
         
     }
@@ -501,6 +507,7 @@ impl NoiseField {
             values: values
         }
     }
+
 
 }
 

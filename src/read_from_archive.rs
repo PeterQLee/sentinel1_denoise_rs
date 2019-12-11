@@ -187,31 +187,14 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                     let mut noisefield:Option<NoiseField> = None;
                     let mut measurement_array:Option<Array2<u16>> = None;
                     let mut copol_array:Option<Array2<u16>> = None;
-                    
+
+                    let mut shape_o:Option<(usize, usize)> = None;
+
+                    // Measurement files first, so we can get the required shape info
                     for i in 0..ziparch.len() {
                         let mut file = ziparch.by_index(i).unwrap();
-
-
-                        // Get swath bounds and period from anno file
-                        if file.name() == crosspol_anno {
-                            let mut buffer = String::new();
-                            let xmldata = file.read_to_string(&mut buffer).unwrap();
-                            let k = SwathElem::new(&buffer);
-                            swath_bounds = Some(k.0);
-                            w = Some(k.1);
-                            
-                        }
-
-                        // Get noise from noise calibration file.
-                        else if file.name() == crosspol_noise {
-                            let mut buffer = String::new();
-                            let xmldata = file.read_to_string(&mut buffer).unwrap();
-                            noisefield = Some(NoiseField::new(&buffer, true));
-                            
-                        }
-
                         // Get crosspol array from tiff file.
-                        else if file.name() == crosspol_measurement {
+                        if file.name() == crosspol_measurement {
                             let mut buffer = Vec::new();
                             let xmldata = file.read_to_end(&mut buffer);
                             let virt_file = Cursor::new(buffer);
@@ -226,7 +209,7 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                                     return None;
                                 }
                             }
-                            
+                            shape_o = Some((y as usize, x as usize));
                             
                             let tiff_result = tiff_file.read_image();
                             match tiff_result {
@@ -243,7 +226,7 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                         }
 
                         // Get crosspol array from tiff file.
-                        else if bothpol_flag && file.name() == copol_measurement {
+                        if bothpol_flag && file.name() == copol_measurement {
                             let mut buffer = Vec::new();
                             let xmldata = file.read_to_end(&mut buffer);
                             let virt_file = Cursor::new(buffer);
@@ -272,6 +255,31 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                                 },
                                 Err(_e) => {println!("The tiff file is not encoded properly"); return None;}
                             }
+                        }
+                    }
+
+                    let shape = shape_o.unwrap();
+                    
+                    for i in 0..ziparch.len() {
+                        let mut file = ziparch.by_index(i).unwrap();
+
+
+                        // Get swath bounds and period from anno file
+                        if file.name() == crosspol_anno {
+                            let mut buffer = String::new();
+                            let xmldata = file.read_to_string(&mut buffer).unwrap();
+                            let k = SwathElem::new(&buffer);
+                            swath_bounds = Some(k.0);
+                            w = Some(k.1);
+                            
+                        }
+
+                        // Get noise from noise calibration file.
+                        else if file.name() == crosspol_noise {
+                            let mut buffer = String::new();
+                            let xmldata = file.read_to_string(&mut buffer).unwrap();
+                            noisefield = Some(NoiseField::new(&buffer, shape, true));
+                            
                         }
 
                     }
