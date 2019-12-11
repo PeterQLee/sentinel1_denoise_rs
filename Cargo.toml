@@ -9,7 +9,8 @@ edition = "2018"
 #blas = "0.19"
 #lapacke = "*"
 openblas-src = "0.5"
-#lapack-sys = {version = "0.12.1", features=["intel-mkl"]}
+lapacke-sys = "0.1.4"
+lapack-src = "0.4.0"
 quick-xml = "0.14.0"
 ndarray = "0.12.1"
 ndarray-linalg = "0.11.1"
@@ -20,6 +21,13 @@ zip = "0.5.3"
 regex = "1.3.1"
 tiff = "0.4.0"
 libc = "*"
+numpy = "0.5.0"
+lapacke = "0.2.0"
+
+[dependencies.pyo3]
+version = "0.6"
+features = ["extension-module"]
+
 
 [lib]
 crate-type = ["staticlib", "cdylib"]

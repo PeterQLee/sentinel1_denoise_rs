@@ -5,9 +5,15 @@ use crate::apply::{apply_swath_scale, prep_measurement, restore_scale, convert_t
 use crate::estimate::*;
 extern crate libc;
 use ndarray::{Array1, Array2};
-//use std::mem;
-//use libc;
 use std::ptr;
+use numpy::{PyArray,PyArray2};
+use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyErr};
+use pyo3::wrap_pyfunction;
+use pyo3::exceptions;
+extern crate openblas_src;
+extern crate lapack_src;
+extern crate lapacke;
+
 
 #[repr(C)] pub struct OutArr {crosspol:*mut libc::c_float,
                               copol:*mut libc::c_float,
@@ -83,3 +89,56 @@ pub extern fn denoise_zip(path:*const u8, pathlen:libc::c_int) -> OutArr{
     }       
 }
 
+
+
+#[pymodule]
+fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
+    ///Get crosspol and copol
+    #[pyfn(m, "get_dualpol_data")]
+    fn get_dualpol_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>)> {
+        let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
+        let lambda2_ = 1.0;
+        let mu = 1.7899;
+        let gamma = 2.0;
+        let zipval = get_data_from_zip_path(zippath, true);
+        match zipval {
+            Some(archout) => {
+                match archout {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                        let mut x_:Option<Array2<f64>> = None;
+                        {
+                            let mut y = noisefield.data.view_mut();
+                            x_ = Some(prep_measurement(x16.view(), y));
+                        }
+                        let mut x = x_.unwrap();
+                        
+                        let sb:Vec<&[SwathElem]> = swath_bounds.iter().map(|a| a.as_slice()).collect();
+                        
+                        let k = estimate_k_values(x.view(), noisefield.data.view(), &w, &sb, mu, gamma, lambda_, lambda2_);
+                        
+                        apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
+                        
+                        restore_scale(x.view_mut());
+
+
+                        let py_cross = PyArray::from_array(__py,&x).to_owned();
+                        let py_co = PyArray::from_array(__py,&co16).to_owned();
+                        return Ok((py_cross, py_co));
+
+                    },
+                    _ => {}
+
+                }
+                
+            },
+            _ => {}
+        }
+
+        return exceptions::ValueError.into();
+        //return Err(exceptions::ValueError("bad parsing path"));
+    }
+
+    
+    m.add_wrapped(wrap_pyfunction!(get_dualpol_data))?;
+    Ok(())
+}
