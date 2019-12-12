@@ -464,20 +464,14 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
             if a == 0 {
                 // EW has multiple peaks
                 
-                let Mx0:usize = pad + 20;
-                let Mx2:usize = swth.lr+1 - swth.fr - pad;
+                let Mx0:usize = pad + 20; //local max 1
+                let Mx2:usize = swth.lr+1 - swth.fr - pad; //local max 3
 
-                //let mn0:usize = Zip::indexed(vy_.slice(s![0..(Mx2-Mx0)/2])) // TODO: fill
-                //    .fold_while((0_usize, 9999999.0), |acc, ind, a| if *a <= acc.1 {(ind, *a)} else {acc} ).0;
-                let mn0:usize = argmin1(vy_.view(), 0, (Mx2-Mx0)/2);
-                //np.argmin(vy_[0:(Mx2-Mx0)/2]);
+                let mn0:usize = argmin1(vy_.view(), 0, (Mx2-Mx0)/2); //local min 1
                 
-                let mn1:usize = (Mx2-Mx0)/2 + argmin1(vy_.view(), (Mx2-Mx0)/2, vy_.dim());
+                let mn1:usize = (Mx2-Mx0)/2 + argmin1(vy_.view(), (Mx2-Mx0)/2, vy_.dim() - 2*bf); //local min 2
 
-                    //np.argmin(vy_[(Mx2-Mx0)/2:])
-
-                let Mx1:usize = mn0 + argmax1(vy_.view(), mn0, mn1);
-                    //np.argmax(vy_[mn0:mn1])
+                let Mx1:usize = mn0 + argmax1(vy_.view(), mn0, mn1); //local max 2
 
                 if swth.la+1 - swth.fa < 40 { continue} //Skip if less than 40 samples
                 for bnum in 0..NUM_SUBSWATHS-1{ // #TODO: fill

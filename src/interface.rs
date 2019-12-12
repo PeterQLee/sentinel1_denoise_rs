@@ -6,7 +6,7 @@ use crate::estimate::*;
 extern crate libc;
 use ndarray::{Array1, Array2};
 use std::ptr;
-use numpy::{PyArray,PyArray2};
+use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyErr};
 use pyo3::wrap_pyfunction;
 use pyo3::exceptions;
@@ -95,7 +95,7 @@ pub extern fn denoise_zip(path:*const u8, pathlen:libc::c_int) -> OutArr{
 fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
     ///Get crosspol and copol
     #[pyfn(m, "get_dualpol_data")]
-    fn get_dualpol_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>)> {
+    fn get_dualpol_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
         let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
         let lambda2_ = 1.0;
         let mu = 1.7899;
@@ -123,7 +123,8 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
 
                         let py_cross = PyArray::from_array(__py,&x).to_owned();
                         let py_co = PyArray::from_array(__py,&co16).to_owned();
-                        return Ok((py_cross, py_co));
+                        let py_k = PyArray::from_array(__py, &k).to_owned();
+                        return Ok((py_cross, py_co, py_k));
 
                     },
                     _ => {}
