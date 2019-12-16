@@ -162,7 +162,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                         //let k = estimate_k_values(x.view(), noisefield.data.view(), &w, &sb, mu, gamma, lambda_, lambda2_);
                         let k = arr1(&[1.0,1.0,1.0,1.0,1.0]);
                         
-                        apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
+                        //apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
                         
                         restore_scale(x.view_mut());
 
