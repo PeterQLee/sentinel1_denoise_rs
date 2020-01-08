@@ -162,7 +162,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                         //let k = estimate_k_values(x.view(), noisefield.data.view(), &w, &sb, mu, gamma, lambda_, lambda2_);
                         let k = arr1(&[1.0,1.0,1.0,1.0,1.0]);
                         
-                        //apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
+                        apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
                         
                         restore_scale(x.view_mut());
 
@@ -185,7 +185,75 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
         //return Err(exceptions::ValueError("bad parsing path"));
     }
 
+    #[pyfn(m, "get_noise_data")]
+    fn get_noise_data(__py:Python, zippath:&str) -> PyResult<Py<PyArray2<f64>>> {
+        let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
+        let lambda2_ = 1.0;
+        let mu = 1.7899;
+        let gamma = 2.0;
+        let zipval = get_data_from_zip_path(zippath, true);
+        match zipval {
+            Some(archout) => {
+                match archout {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                        
+                        let mut y = noisefield.data.view_mut();
+
+                        let py_noise = PyArray::from_array(__py,&y).to_owned();
+                        return Ok(py_noise);
+
+                    },
+                    _ => {}
+
+                }
+                
+            },
+            _ => {}
+        }
+
+        return exceptions::ValueError.into();
+        //return Err(exceptions::ValueError("bad parsing path"));
+    }
+    #[pyfn(m, "get_raw_crosspol")]
+    fn get_raw_crosspol(__py:Python, zippath:&str) -> PyResult<Py<PyArray2<f64>>> {
+        let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
+        let lambda2_ = 1.0;
+        let mu = 1.7899;
+        let gamma = 2.0;
+        let zipval = get_data_from_zip_path(zippath, true);
+        match zipval {
+            Some(archout) => {
+                match archout {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                        
+                        let mut x_:Option<Array2<f64>> = None;
+                        {
+                            let mut y = noisefield.data.view_mut();
+                            x_ = Some(prep_measurement(x16.view(), y));
+                        }
+                        let mut x = x_.unwrap();
+
+
+                        let py_cross = PyArray::from_array(__py,&x).to_owned();
+                        return Ok(py_cross);
+
+                    },
+                    _ => {}
+
+                }
+                
+            },
+            _ => {}
+        }
+
+        return exceptions::ValueError.into();
+        //return Err(exceptions::ValueError("bad parsing path"));
+    }
+
+
     m.add_wrapped(wrap_pyfunction!(get_noscale_data))?;
     m.add_wrapped(wrap_pyfunction!(get_dualpol_data))?;
+    m.add_wrapped(wrap_pyfunction!(get_noise_data))?;
+    m.add_wrapped(wrap_pyfunction!(get_raw_crosspol))?;
     Ok(())
 }
