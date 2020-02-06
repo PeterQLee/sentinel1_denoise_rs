@@ -6,7 +6,7 @@ use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayView1,
 use ndarray::Zip;
 use ndarray::prelude::*;
 //use ndarray::parallel::prelude::*;
-use ndarray_parallel::prelude::*;
+//use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
 //use itertools::Itertools;
 

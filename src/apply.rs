@@ -3,7 +3,7 @@ use ndarray::prelude::*;
 
 use ndarray::{ArrayViewMut2, ArrayView1, ArrayView2, Slice};
 use ndarray::Zip;
-use ndarray_parallel::prelude::*;
+//use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
 
 

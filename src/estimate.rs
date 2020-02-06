@@ -6,7 +6,7 @@ use std::str;
 use ndarray::prelude::*;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2, Slice};
 //use ndarray_linalg::Solve;
-use ndarray_parallel::prelude::*;
+//use ndarray_parallel::prelude::*;
 use ndarray::Zip;
 use rayon::prelude::*;
 
@@ -129,38 +129,39 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                                   gamma);
 
     //TODO: transform C_vec into fortran order.
-    let C_vec = C.to_vec();
+    let C_vec = C.into_raw_vec();
     let mut A = vec![0.0;NUM_SUBSWATHS*NUM_SUBSWATHS];
     
     unsafe {
-        gemm(b'N', b'T', n_eqs, NUM_SUBSWATHS, NUM_SUBSWATHS, 1.0, &C_vec,  n_eqs, &C_vec,  NUM_SUBSWATHS, 1.0, &A,  NUM_SUBSWATHS);
+        dgemm(b'N', b'T', n_eqs as i32, NUM_SUBSWATHS as i32, NUM_SUBSWATHS as i32, 1.0, &C_vec,  n_eqs as i32, &C_vec,  NUM_SUBSWATHS as i32, 1.0, &mut A,  NUM_SUBSWATHS as i32);
     }
     //let A:Array2<f64> = C.t().dot(&C);
 
     let mut b = vec![0.0;NUM_SUBSWATHS];
+    let m_vec = m.to_vec();
     unsafe {
-        dgemv(b'T', n_eqs, NUM_SUBSWATHS, 1.0, C_vec, n_eqs, &m_vec, 1, &b, 1);
+        dgemv(b'T', n_eqs as i32, NUM_SUBSWATHS as i32, 1.0, &C_vec, n_eqs as i32, &m_vec, 1_i32, 0.0, &mut b, 1_i32);
     }
     //let b:Array1<f64> = C.t().dot(&m);
 
     
-    let INFO:i64;
-    let IPIV:Vec<i64> = vec![0;NUM_SUBSWATHS];
-    let k:Vec<i64> = vec![0.0;NUM_SUBSWATHS];
+    let mut INFO:i32 = 0;
+    let mut IPIV:Vec<i32> = vec![0;NUM_SUBSWATHS];
+    let mut k:Vec<f64> = vec![0.0;NUM_SUBSWATHS];
     unsafe {
-        dgesv(NUM_SUBSWATHS, //num eqs
-              NUM_SUBSWATHS, //num eqs
-              &A,
-              NUM_SUBSWATHS, //leading dim of A
-              &IPIV, //pivot matrix
-              &k, /////// right hand side
-              NUM_SUBSWATHS, //LDB
-              &INFO);
+        dgesv(NUM_SUBSWATHS as i32, //num eqs
+              NUM_SUBSWATHS as i32, //num eqs
+              &mut A,
+              NUM_SUBSWATHS as i32, //leading dim of A
+              &mut IPIV, //pivot matrix
+              &mut k, /////// right hand side
+              NUM_SUBSWATHS as i32, //LDB
+              &mut INFO);
     }
 
     //let k = A.solve_into(b).unwrap();
 
-    return k;
+    return Array1::from_vec(k);
     
 }
                      
