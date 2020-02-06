@@ -8,13 +8,13 @@ edition = "2018"
 [dependencies]
 #blas = "0.19"
 #lapacke = "*"
-openblas-src = "0.5"
-lapacke-sys = "0.1.4"
-lapack-src = "0.4.0"
+#openblas-src = "0.5"
+#lapacke-sys = "0.1.4"
+#lapack-src = "0.4.0"
 quick-xml = "0.14.0"
-ndarray = "0.12.1"
-ndarray-linalg = "0.11.1"
-ndarray-parallel = "0.9.1"
+ndarray = "0.13.0"
+#ndarray-linalg = "0.11.1"
+#ndarray-parallel = "0.9.1"
 rayon = "1.2.1"
 hdf5 = "0.5.1"
 zip = "0.5.3"
@@ -25,7 +25,7 @@ numpy = "0.5.0"
 lapacke = "0.2.0"
 
 [dependencies.pyo3]
-version = "0.6"
+version = "0.8"
 features = ["extension-module"]
 
 

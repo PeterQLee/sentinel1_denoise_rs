@@ -5,11 +5,14 @@ use quick_xml::events::Event;
 use std::str;
 use ndarray::prelude::*;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2, Slice};
-use ndarray_linalg::Solve;
+//use ndarray_linalg::Solve;
 use ndarray_parallel::prelude::*;
 use ndarray::Zip;
 use rayon::prelude::*;
 
+// Linear algebra
+use lapack::*;
+use blas::*;
 
 /// Mean along first axis
 fn mean_ax0 (x:ArrayView2<f64>, sa:usize, la:usize, sb:usize, lb:usize) -> Array1<f64>{
@@ -125,10 +128,37 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                                   n_reg,
                                   gamma);
 
-    let A:Array2<f64> = C.t().dot(&C);
-    let b:Array1<f64> = C.t().dot(&m);
+    //TODO: transform C_vec into fortran order.
+    let C_vec = C.to_vec();
+    let mut A = vec![0.0;NUM_SUBSWATHS*NUM_SUBSWATHS];
+    
+    unsafe {
+        gemm(b'N', b'T', n_eqs, NUM_SUBSWATHS, NUM_SUBSWATHS, 1.0, &C_vec,  n_eqs, &C_vec,  NUM_SUBSWATHS, 1.0, &A,  NUM_SUBSWATHS);
+    }
+    //let A:Array2<f64> = C.t().dot(&C);
 
-    let k = A.solve_into(b).unwrap();
+    let mut b = vec![0.0;NUM_SUBSWATHS];
+    unsafe {
+        dgemv(b'T', n_eqs, NUM_SUBSWATHS, 1.0, C_vec, n_eqs, &m_vec, 1, &b, 1);
+    }
+    //let b:Array1<f64> = C.t().dot(&m);
+
+    
+    let INFO:i64;
+    let IPIV:Vec<i64> = vec![0;NUM_SUBSWATHS];
+    let k:Vec<i64> = vec![0.0;NUM_SUBSWATHS];
+    unsafe {
+        dgesv(NUM_SUBSWATHS, //num eqs
+              NUM_SUBSWATHS, //num eqs
+              &A,
+              NUM_SUBSWATHS, //leading dim of A
+              &IPIV, //pivot matrix
+              &k, /////// right hand side
+              NUM_SUBSWATHS, //LDB
+              &INFO);
+    }
+
+    //let k = A.solve_into(b).unwrap();
 
     return k;
     

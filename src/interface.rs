@@ -9,9 +9,9 @@ use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyErr};
 use pyo3::wrap_pyfunction;
 use pyo3::exceptions;
-extern crate openblas_src;
+//extern crate openblas_src;
 extern crate lapack_src;
-extern crate lapacke;
+//extern crate lapacke;
 
 
 #[repr(C)] pub struct OutArr {crosspol:*mut libc::c_float,
