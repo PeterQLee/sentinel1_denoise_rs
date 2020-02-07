@@ -5,7 +5,7 @@ Author: Peter Q Lee. pqjlee (at) uwaterloo (dot) ca
 You will need to install rust nightly. 
 
 1. Get rustup. Visit [https://rustup.rs] 
-2. Install rust nightly. `rustup install nightly`
+2. Install rust nightly. `rustup toolchain install nightly`
 3. Install OpenBLAS.
 4. HDFlib-dev
 5. cd into this directory. Run `python3 setup.py`
