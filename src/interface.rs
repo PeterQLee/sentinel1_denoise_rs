@@ -214,7 +214,9 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
         return exceptions::ValueError.into();
         //return Err(exceptions::ValueError("bad parsing path"));
     }
+    
     #[pyfn(m, "get_raw_crosspol")]
+    /// Deprecated: Returns the un denoised crosspol
     fn get_raw_crosspol(__py:Python, zippath:&str) -> PyResult<Py<PyArray2<f64>>> {
         let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
         let lambda2_ = 1.0;
@@ -248,6 +250,39 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
 
         return exceptions::ValueError.into();
         //return Err(exceptions::ValueError("bad parsing path"));
+    }
+
+    #[pyfn(m, "get_raw_data")]
+    ///Returns the original cross pol, co pol, and noise field.
+    fn get_raw_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<u16>>, Py<PyArray2<u16>>, Py<PyArray2<f64>>)> {
+        let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
+        let lambda2_ = 1.0;
+        let mu = 1.7899;
+        let gamma = 2.0;
+        let zipval = get_data_from_zip_path(zippath, true);
+        match zipval {
+            Some(archout) => {
+                match archout {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {                 
+                        let mut y = noisefield.data.view_mut();
+                        
+                        let py_cross = PyArray::from_array(__py,&x16).to_owned();
+                        let py_co = PyArray::from_array(__py,&co16).to_owned();
+                        let py_y = PyArray::from_array(__py, &y).to_owned();
+                        return Ok((py_cross, py_co, py_y));
+
+                    },
+                    _ => {}
+
+                }
+                
+            },
+            _ => {}
+        }
+
+        return exceptions::ValueError.into();
+        //return Err(exceptions::ValueError("bad parsing path"));
+
     }
 
 
