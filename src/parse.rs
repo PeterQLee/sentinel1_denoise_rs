@@ -160,8 +160,8 @@ impl NoiseField {
         Zip::from(&mut arr)
             .and(&rgarr)
             .and(&azarr)
-        //    .apply(|a, &rg, &az| {
-            .par_apply(|a, &rg, &az| {
+            .apply(|a, &rg, &az| {
+            //.par_apply(|a, &rg, &az| {
                 *a = rg*az;
             });
         return arr;
@@ -218,7 +218,8 @@ impl NoiseField {
             let endpoints = arr.index_axis(Axis(0),end).into_owned();
             let startpoints = arr.index_axis(Axis(0),start).into_owned();
             Zip::indexed(&mut arr.slice_axis_mut(Axis(0), Slice::from(start..end+1)))
-                .par_apply(|ind, a| {
+            //.par_apply(|ind, a| {
+		.apply(|ind, a| {
                     let (x,y) = ind;
                     let slope = ((&endpoints)[y] - (&startpoints)[y])/((end-start) as f64);
                     *a = slope*(x as f64) + (&startpoints)[y];

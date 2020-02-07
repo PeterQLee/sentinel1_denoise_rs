@@ -128,40 +128,39 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                                   n_reg,
                                   gamma);
 
-    //TODO: transform C_vec into fortran order.
-    let C_vec = C.into_raw_vec();
-    let mut A = vec![0.0;NUM_SUBSWATHS*NUM_SUBSWATHS];
     
-    unsafe {
-        dgemm(b'N', b'T', n_eqs as i32, NUM_SUBSWATHS as i32, NUM_SUBSWATHS as i32, 1.0, &C_vec,  n_eqs as i32, &C_vec,  NUM_SUBSWATHS as i32, 1.0, &mut A,  NUM_SUBSWATHS as i32);
-    }
-    //let A:Array2<f64> = C.t().dot(&C);
+    let C_vec:Vec<f64> = C.t().iter().cloned().collect();
+    let mut A = vec![0.0;NUM_SUBSWATHS*NUM_SUBSWATHS];
 
+    // Compute C^T@C
+    unsafe {
+        dgemm(b'T', b'N', NUM_SUBSWATHS as i32, NUM_SUBSWATHS as i32, n_eqs as i32, 1.0, &C_vec,  n_eqs as i32, &C_vec,  n_eqs as i32, 1.0, &mut A,  NUM_SUBSWATHS as i32);
+    }
+
+    // Compute C^T@b
     let mut b = vec![0.0;NUM_SUBSWATHS];
     let m_vec = m.to_vec();
     unsafe {
-        dgemv(b'T', n_eqs as i32, NUM_SUBSWATHS as i32, 1.0, &C_vec, n_eqs as i32, &m_vec, 1_i32, 0.0, &mut b, 1_i32);
+	dgemv(b'T', n_eqs as i32, NUM_SUBSWATHS as i32, 1.0, &C_vec, (n_eqs) as i32, &m_vec, 1_i32, 0.0, &mut b, 1_i32);
     }
-    //let b:Array1<f64> = C.t().dot(&m);
 
-    
+
+
+    // Solve linear system.
     let mut INFO:i32 = 0;
     let mut IPIV:Vec<i32> = vec![0;NUM_SUBSWATHS];
-    let mut k:Vec<f64> = vec![0.0;NUM_SUBSWATHS];
     unsafe {
         dgesv(NUM_SUBSWATHS as i32, //num eqs
-              NUM_SUBSWATHS as i32, //num eqs
+              1 as i32, //num eqs
               &mut A,
               NUM_SUBSWATHS as i32, //leading dim of A
               &mut IPIV, //pivot matrix
-              &mut k, /////// right hand side
+              &mut b, /////// right hand side
               NUM_SUBSWATHS as i32, //LDB
               &mut INFO);
     }
 
-    //let k = A.solve_into(b).unwrap();
-
-    return Array1::from_vec(k);
+    return Array1::from_vec(b);
     
 }
                      
@@ -244,8 +243,8 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
             .and(x_row.slice(s![n..n+i,1]))
             .and(y_row.slice(s![n..n+i,0]))
             .and(y_row.slice(s![n..n+i,1]))
-            //.apply( |m, c, x0, x1, y0, y1| {
-            .par_apply( |m, c, x0, x1, y0, y1| {
+            .apply( |m, c, x0, x1, y0, y1| {
+            //.par_apply( |m, c, x0, x1, y0, y1| {
                 let m_ = (x0) - (x1);
                 let c_ = (y0) - (y1);
                 let kratio = c_*m_/(c_*c_);
@@ -414,16 +413,16 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 0]))
                 .and(&x.slice(s![swth.fa..swth.la+1-hf_add, swth.fr..swth.lr+1]).sum_axis(Axis(1)))
-                .par_apply(|xr, xm| {
-                //.apply(|xr, xm| {
+                //.par_apply(|xr, xm| {
+                .apply(|xr, xm| {
                     *xr = xm/((swth.lr+1-swth.fr) as f64)/NORM;
                 });
 
             Zip::from(&mut x_row.slice_mut(s![n..n+increment, 1]))
                 .and(&x.slice(s![swth.fa+half_period..swth.la+1+half_period-hf_add,
                                  swth.fr..swth.lr+1]).sum_axis(Axis(1)))
-                .par_apply(|xr, xm|{
-                //.apply(|xr, xm| {
+                //.par_apply(|xr, xm|{
+		.apply(|xr, xm| {
                     *xr = xm/((swth.lr+1-swth.fr) as f64)/NORM;
                 });
 
