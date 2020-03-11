@@ -15,7 +15,7 @@ You will need to install rust nightly.
 
 ```python
 import denoise_engine
-hv, hh, k = get_dualpol_data(path_to_zip)
+hv, hh, k = denoise_engine.get_dualpol_data(path_to_zip)
 ```
 
 
