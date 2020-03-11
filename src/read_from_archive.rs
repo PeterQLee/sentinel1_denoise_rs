@@ -6,7 +6,7 @@ use std::io::Cursor;
 use std::fs::File;
 use regex::Regex;
 use std::string::String;
-use tiff::decoder::{Decoder, DecodingResult};
+use tiff::decoder::{Decoder, DecodingResult, Limits};
 use ndarray::{Array,Array2};
 
 
@@ -199,13 +199,19 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                             let xmldata = file.read_to_end(&mut buffer);
                             let virt_file = Cursor::new(buffer);
                             let mut tiff_file = Decoder::new(virt_file).unwrap();
+                            let mut limits = Limits::default();
+                            limits.decoding_buffer_size = 1_usize<<30;
+                            limits.ifd_value_size = 1_usize<<20;
+                            tiff_file = tiff_file.with_limits(limits);
+
 
                             let tiff_dims = tiff_file.dimensions();
                             let (x,y):(u32,u32);
                             match tiff_dims {
                                 Ok(t) => {x = t.0; y = t.1;}
-                                Err(_e) => {
-                                    println!("The tiff file is not encoded properly");
+                                Err(e) => {
+                                    println!("The tiff file is not encoded properly (dimensions)");
+                                    println!("{}", e);
                                     return None;
                                 }
                             }
@@ -221,7 +227,11 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                                         println!("The tiff file is not encoded properly (Bitdepth)."); return None;
                                     }
                                 },
-                                Err(_e) => {println!("The tiff file is not encoded properly"); return None;}
+                                Err(e) => {
+                                    println!("The tiff file is not encoded properly (readimg)");
+                                    println!("{}", e);
+                                    return None;
+                                }
                             }
                         }
 
@@ -231,13 +241,18 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                             let xmldata = file.read_to_end(&mut buffer);
                             let virt_file = Cursor::new(buffer);
                             let mut tiff_file = Decoder::new(virt_file).unwrap();
+                            let mut limits = Limits::default();
+                            limits.decoding_buffer_size = 1_usize<<30;
+                            limits.ifd_value_size = 1_usize<<20;
+                            tiff_file = tiff_file.with_limits(limits);
 
                             let tiff_dims = tiff_file.dimensions();
                             let (x,y):(u32,u32);
                             match tiff_dims {
                                 Ok(t) => {x = t.0; y = t.1;}
-                                Err(_e) => {
-                                    println!("The tiff file is not encoded properly");
+                                Err(e) => {
+                                    println!("The tiff file is not encoded properly (dimensions)");
+                                    println!("{}", e);
                                     return None;
                                 }
                             }
@@ -253,7 +268,11 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                                         println!("The tiff file is not encoded properly (Bitdepth)."); return None;
                                     }
                                 },
-                                Err(_e) => {println!("The tiff file is not encoded properly"); return None;}
+                                Err(e) => {
+                                    println!("The tiff file is not encoded properly");
+                                    println!("{}", e);
+                                    return None;
+                                }
                             }
                         }
                     }
