@@ -11,9 +11,11 @@ use ndarray::{Array,Array2};
 
 
 #[derive(Debug)]
-struct SentinelFormatId {
+pub struct SentinelFormatId {
     upper_dateid:String,
     sentid:String,
+    pub sentmode:String,
+    lower_sentmode:String,
     quality:String,
     polarization:String,
     lower_dateid:String
@@ -53,7 +55,7 @@ impl SentinelFormatId {
             _ =>  up_sentid = "B"
         }
         
-        return format!("S1{up_sentid}_EW_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/annotation/s1{sentid}-ew-grd-{polid}-{lower_dateid}-002.xml", up_sentid = up_sentid, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
+        return format!("S1{up_sentid}_{sentmode}_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/annotation/s1{sentid}-{lower_sentmode}-grd-{polid}-{lower_dateid}-002.xml", up_sentid = up_sentid, sentmode = self.sentmode, lower_sentmode = self.lower_sentmode, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
     }
 
     fn create_crosspol_noise(&self) -> String {
@@ -70,7 +72,7 @@ impl SentinelFormatId {
             "a" => up_sentid = "A",
             _ =>  up_sentid = "B"
         }
-        return format!("S1{up_sentid}_EW_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/annotation/calibration/noise-s1{sentid}-ew-grd-{polid}-{lower_dateid}-002.xml", up_sentid = up_sentid, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
+        return format!("S1{up_sentid}_{sentmode}_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/annotation/calibration/noise-s1{sentid}-{lower_sentmode}-grd-{polid}-{lower_dateid}-002.xml", up_sentid = up_sentid, sentmode = self.sentmode, lower_sentmode = self.lower_sentmode, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
     }
 
     fn create_crosspol_measurement(&self) -> String {
@@ -87,7 +89,7 @@ impl SentinelFormatId {
             "a" => up_sentid = "A",
             _ =>  up_sentid = "B"
         }
-        return format!("S1{up_sentid}_EW_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/measurement/s1{sentid}-ew-grd-{polid}-{lower_dateid}-002.tiff", up_sentid = up_sentid, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
+        return format!("S1{up_sentid}_{sentmode}_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/measurement/s1{sentid}-{lower_sentmode}-grd-{polid}-{lower_dateid}-002.tiff", up_sentid = up_sentid, quality = self.quality, sentmode = self.sentmode, lower_sentmode = self.lower_sentmode, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
     }
 
 
@@ -105,7 +107,7 @@ impl SentinelFormatId {
             "a" => up_sentid = "A",
             _ =>  up_sentid = "B"
         }
-        return format!("S1{up_sentid}_EW_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/measurement/s1{sentid}-ew-grd-{polid}-{lower_dateid}-001.tiff", up_sentid = up_sentid, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
+        return format!("S1{up_sentid}_{sentmode}_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/measurement/s1{sentid}-{lower_sentmode}-grd-{polid}-{lower_dateid}-001.tiff", up_sentid = up_sentid, quality = self.quality, sentmode = self.sentmode, lower_sentmode = self.lower_sentmode, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
     }
 
 }
@@ -114,18 +116,20 @@ impl SentinelFormatId {
 ///ex: S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.SAFE-report-20180902T190505.pdf
 /// Returns (Uppercase string, lowercase dateid, sentinelid[a or b])
 fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
-    // Takes the pdf name as input
-    let pdf_re = Regex::new(r"^S1[A|B]_EW_GRD._1SD[H|V]_.*\.SAFE/S1([A|B])_EW_GRD(.)_1SD([H|V])_(.*)\.SAFE.*\.pdf$").unwrap();
+    // Takes the pdf name as inputg
+    let pdf_re = Regex::new(r"^S1[A|B]_[IE]W_GRD._1SD[H|V]_.*\.SAFE/S1([A|B])_([EI]W)_GRD(.)_1SD([H|V])_(.*)\.SAFE.*\.pdf$").unwrap();
     if pdf_re.is_match(token) {
         let mut upper_dateid:String = String::new();
+	let mut sentmode:String = String::new();
         let mut sentid:String = String::new();
         let mut polarization:String = String::new();
         let mut quality:String = String::new();
         for t in pdf_re.captures_iter(token) {
             sentid.insert_str(0,&t[1]);
-            quality.insert_str(0, &t[2]);
-            polarization.insert_str(0,&t[3]);
-            upper_dateid.insert_str(0,&t[4]);
+	    sentmode.insert_str(0, &t[2]);
+            quality.insert_str(0, &t[3]);
+            polarization.insert_str(0,&t[4]);
+            upper_dateid.insert_str(0,&t[5]);
 
         }
         polarization.make_ascii_lowercase();
@@ -134,12 +138,18 @@ fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
         let mut lower_dateid:String = upper_dateid.clone();
         lower_dateid.make_ascii_lowercase();
         lower_dateid = lower_dateid.replace("_","-");
+
+	let mut lower_sentmode:String = sentmode.clone();
+	lower_sentmode.make_ascii_lowercase();
+	
         let spl = lower_dateid.rfind('-').unwrap();
         let _ = lower_dateid.split_off(spl);
 
         return Some(SentinelFormatId {
             upper_dateid:upper_dateid,
             sentid:sentid,
+	    sentmode:sentmode,
+	    lower_sentmode:lower_sentmode,
             quality:quality,
             polarization:polarization,
             lower_dateid:lower_dateid
@@ -287,7 +297,7 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                         if file.name() == crosspol_anno {
                             let mut buffer = String::new();
                             let xmldata = file.read_to_string(&mut buffer).unwrap();
-                            let k = SwathElem::new(&buffer);
+                            let k = SwathElem::new(&buffer, &id);
                             swath_bounds = Some(k.0);
                             w = Some(k.1);
                             

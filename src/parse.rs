@@ -9,9 +9,9 @@ use ndarray::prelude::*;
 //use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
 //use itertools::Itertools;
+use crate::read_from_archive::SentinelFormatId;
 
 
-const NUM_SUBSWATHS:usize = 5;
 
 
 pub struct NoiseField {
@@ -515,8 +515,15 @@ impl NoiseField {
 
 impl SwathElem {
     /// Creates an nested vector of swath elems and the period for each subswath
-    pub fn new(filebuffer:&str) -> (Vec<Vec<SwathElem>>, Vec<usize>) {
+    pub fn new(filebuffer:&str, sentformat:&SentinelFormatId) -> (Vec<Vec<SwathElem>>, Vec<usize>) {
         let mut reader = Reader::from_str(filebuffer);
+	let mut NUM_SUBSWATHS:usize = 5;
+
+	match sentformat.sentmode.as_str() {
+	    "EW" => {NUM_SUBSWATHS = 5},
+	    "IW" => {NUM_SUBSWATHS = 3},
+	    _ => panic!("Incorrect sentmode")
+	}
 
         let swath_keys:[Box<&[u8]>; 3] = [Box::new(b"product"), 
                                           Box::new(b"swathMerging"),
