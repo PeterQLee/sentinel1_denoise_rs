@@ -210,8 +210,8 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                             let virt_file = Cursor::new(buffer);
                             let mut tiff_file = Decoder::new(virt_file).unwrap();
                             let mut limits = Limits::default();
-                            limits.decoding_buffer_size = 1_usize<<30;
-                            limits.ifd_value_size = 1_usize<<20;
+                            limits.decoding_buffer_size = 1_usize<<40;
+                            limits.ifd_value_size = 1_usize<<40;
                             tiff_file = tiff_file.with_limits(limits);
 
 
@@ -252,8 +252,8 @@ pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelAr
                             let virt_file = Cursor::new(buffer);
                             let mut tiff_file = Decoder::new(virt_file).unwrap();
                             let mut limits = Limits::default();
-                            limits.decoding_buffer_size = 1_usize<<30;
-                            limits.ifd_value_size = 1_usize<<20;
+                            limits.decoding_buffer_size = 1_usize<<40;
+                            limits.ifd_value_size = 1_usize<<40;
                             tiff_file = tiff_file.with_limits(limits);
 
                             let tiff_dims = tiff_file.dimensions();
