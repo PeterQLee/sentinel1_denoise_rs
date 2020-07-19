@@ -9,6 +9,7 @@ use ndarray::prelude::*;
 //use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
 //use itertools::Itertools;
+use chrono::prelude::*;
 use crate::read_from_archive::SentinelFormatId;
 
 
@@ -33,7 +34,8 @@ pub struct SwathElem {
 }
 
 
-
+pub struct ParseAnnotation {
+}
 
 
 
@@ -712,3 +714,125 @@ impl SwathElem {
         subswath
     }
 }
+
+
+
+
+
+ struct TimeRow {
+	row:usize,
+	col:usize,
+	aztime:f64
+ }
+
+
+
+struct TimeRowLut {
+}
+
+impl TimeRowLut {
+   
+    
+    /// Time delta of the given azimuth time
+  //  fn strtime_to_f64(aztime:&str) -> Result<f64, >{
+    fn strtime_to_f64(aztime:&str) -> Result<f64, chrono::format::ParseError>{
+
+	
+	//base = datetime.datetime(2014, 1, 1) # This is before the launch date of sentinel 1
+	//dt = datetime.datetime.strptime(aztime, "%Y-%m-%dT%H:%M:%S.%f")
+	//return (dt - base).total_seconds()
+	let base =  Utc.ymd(2014, 1, 1).and_hms_milli(0, 0, 0, 0);
+	let dt = (aztime).parse::<DateTime<Utc>>()?;
+	let g = dt.signed_duration_since(base);
+	match g.to_std() {
+	    Ok(s) => Ok(s.as_secs_f64()),
+	    Err(e) => panic!("XML file malformed (impossible date time)")
+	}
+
+    }
+    ///Return a full lookup table
+    fn new(filebuffer:&str, swath_bounds:&Vec<SwathElem>, sentformat:&SentinelFormatId) {
+	let mut reader = Reader::from_str(filebuffer);
+	let keys:[Box<&[u8]>;2] = [Box::new(b"newgeolocationGrid"),
+				   Box::new(b"geolocationGridPointList")
+
+	];
+
+	let time_list = seek_to_list(&keys, &mut reader, TimeRowLut::parse_geo);
+	//swath:TimeRowLut::find_swath(swath_bounds, line, pixel, sentformat);
+    }
+
+    ///Returns the oriignal lookuptable from the geocoordinate points.
+    fn parse_geo(reader:&mut Reader<&[u8]>) -> TimeRow {
+	enum ExtractState { Line, Pixel, AzimuthTime, None};
+	let mut state = ExtractState::None;
+
+	let mut line:usize = 99999;
+	let mut pixel:usize = 99999;
+	let mut az_time:f64 = 0.0;
+
+	let mut buf = Vec::new();
+	
+	
+	loop {
+	    match reader.read_event(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"line" => {state = ExtractState::Line},
+			b"pixel" => {state = ExtractState::Pixel},
+			b"azimuthTime" => {state = ExtractState::AzimuthTime},
+                        _ => {},
+                    }
+                }
+
+                Ok(Event::Text(ref e)) => {
+                    match state {
+                        ExtractState::Line => {
+			    let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => line = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        }
+			ExtractState::Pixel => {
+			    let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<usize>();
+                            match val {
+                                Ok(v) => pixel = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+                        }
+			ExtractState::AzimuthTime => {
+			    
+			    match TimeRowLut::strtime_to_f64(str::from_utf8(&e.unescaped().unwrap()).unwrap()) {
+				Ok(v) => az_time = v,
+				Err(_e) => panic!("Malformed xml file (Azimuth time)")
+			    }
+                        }
+                        ExtractState::None => {}
+                    }
+                }
+                    
+//		b"geolocationGridPointList" => {break;},
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+			b"line" => {state = ExtractState::None},
+			b"pixel" => {state = ExtractState::None},
+			b"azimuthTime" => {state = ExtractState::None},
+                        b"geolocationGridPoint" => {break},
+                        _ => {},
+                    }
+                },
+                
+                _ => {}
+
+	    }
+	}
+	
+	TimeRow {
+	    row:line,
+	    col:pixel,
+	    aztime:az_time,
+	}
+    }
+}
+

@@ -24,6 +24,7 @@ regex = "1.3.1"
 tiff = "0.4.0"
 libc = "*"
 numpy = "0.7.0"
+chrono = "*"
 
 
 [dependencies.pyo3]
@@ -31,13 +32,13 @@ version = "0.8"
 features = ["extension-module"]
 
 
-[lib]
-crate-type = ["staticlib", "cdylib"]
-name = "denoise_engine"
-path = "src/lib.rs"
+# [lib]
+# crate-type = ["staticlib", "cdylib"]
+# name = "denoise_engine"
+# path = "src/lib.rs"
 
-#[[bin]]
-#name = "noise_to_tiff"
-#path = "src/noise_to_tiff.rs"
+[[bin]]
+name = "noise_to_tiff"
+path = "src/noise_to_tiff.rs"
 
 
