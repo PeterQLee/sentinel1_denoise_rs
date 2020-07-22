@@ -5,13 +5,51 @@ use crate::parse::{NoiseField, SwathElem, BurstEntry, TimeRowLut, RawPattern};
 use crate::read_from_archive::SentinelFormatId;
 use lapack::*;
 use std::sync::{Arc, Mutex};
+use std::ops::Index;
 
 // FFT libs for fast convolution.
 use rustfft::FFTplanner;
 use rustfft::num_complex::Complex64;
-use ndarray::ArrayView2;
+use ndarray::{ArrayView2, Array2};
+use std::thread;
 
-type ArrToArr = Box<Fn(&[usize]) -> Vec<f64>>;
+type ArrToArr = Arc<Box<Fn(&[usize]) -> Vec<f64> + Sync + Send>> ;
+
+pub struct TwoDArray{
+    pub rows:usize,
+    pub cols:usize,
+    data:Vec<f64>
+}
+
+impl Index<(usize, usize)> for TwoDArray {
+    type Output = f64;
+    ///column major order
+    fn index(&self, x:(usize, usize)) -> &f64{
+	&self.data[x.0 + x.1*self.rows]
+    }
+}
+
+impl TwoDArray {
+    pub fn from_ndarray(ndarr:Array2<f64>) -> TwoDArray {
+	let row = ndarr.nrows();
+	let col = ndarr.ncols();
+	
+	if ndarr.is_standard_layout() {
+	    return TwoDArray{
+		rows:row,
+		cols:col,
+		data:ndarr.reversed_axes().into_raw_vec()
+	    };
+	}
+	else {
+	    return TwoDArray{
+		rows:row,
+		cols:col,
+		data:ndarr.into_raw_vec()
+	    };
+	}
+    }
+}
 
 macro_rules! get_num_subswath {
     ($sw:expr) => {
@@ -159,7 +197,7 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     fn apply_quad(s:f64, coef:(f64, f64, f64)) -> f64 {
 	coef.0 + s*coef.1 + s*s*coef.2
     }
-    Box::new(move |cols:&[usize]| -> Vec<f64> {
+    Arc::new(Box::new(move |cols:&[usize]| -> Vec<f64> {
 	cols.iter().map(|s_| {
 	    let s = (*s_) as f64;
 	    if s < x_c[0] {apply_quad(s, coef_list[0])}
@@ -172,27 +210,27 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
 	    }
 
 	}).collect()
-    })
+    }))
     
     
 }
 
 pub enum MidPoint {
-    Est(Vec<Vec<Vec<f64>>>),
-    Test(Vec<Vec<Vec<(f64,f64)>>>),
+    Est(Vec<Vec<Arc<Vec<f64>>>>),
+    Test(Vec<Vec<Arc<Vec<(f64,f64)>>>>),
 }
 /// Returns a dictionary that provides the antenna values.
 /// Along with indices of where to "split"
 pub fn get_interpolation_pattern (buffer:&str,
-				  burst_coords:&Vec<Vec<BurstEntry>>,
+				  burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 				  time_row_lut:&TimeRowLut,
 				  pat_raw:&RawPattern, id:&SentinelFormatId, eval:bool)
 				  -> (Vec<Vec<ArrToArr>>, MidPoint) {
     let num_subswaths:usize = get_num_subswath!(id);
 
     let mut mp_dict:Vec<Vec<ArrToArr>> = Vec::new(); // vector of closures for pattern value derivation
-    let mut test_indices:Vec<Vec<Vec<(f64,f64)>>> = Vec::new();
-    let mut est_indices:Vec<Vec<Vec<f64>>> = Vec::new();
+    let mut test_indices:Vec<Vec<Arc<Vec<(f64,f64)>>>> = Vec::new();
+    let mut est_indices:Vec<Vec<Arc<Vec<f64>>>> = Vec::new();
 
     for (swath, bu_co) in burst_coords.iter().enumerate() {
 	mp_dict.push(Vec::new());
@@ -226,9 +264,10 @@ pub fn get_interpolation_pattern (buffer:&str,
 	    match eval {
 		true => {
 		    let t = multi(&mid_angles, row);
-		    test_indices[swath].push(t.iter().enumerate().step_by(2).map(|x| (*x.1,t[x.0+1])).collect());
+		    test_indices[swath].push(Arc::new(
+					     t.iter().enumerate().step_by(2).map(|x| (*x.1,t[x.0+1])).collect()));
 		}
-		false => {est_indices[swath].push(multi(&mid_angles, row));}
+		false => {est_indices[swath].push(Arc::new(multi(&mid_angles, row)));}
 	    }
 	}
     }
@@ -245,7 +284,7 @@ pub struct HyperParams {
     pub add_pad:usize,//? where to pad the adjacent slices
 }
 
-fn compute_mean_slice(x:ArrayView2<f64>, swath_bounds:BurstEntry)  -> Vec<f64> {
+fn compute_mean_slice(x:Arc<TwoDArray>, swath_bounds:BurstEntry)  -> Vec<f64> {
     let mut res = vec![0.0; swath_bounds.lr+1 - swath_bounds.fr];
     for i in swath_bounds.fr..swath_bounds.lr+1 {
 	let mut cum_val = 0.0;
@@ -299,8 +338,8 @@ fn boxcar(sl:&[f64], hyper:&HyperParams) -> Vec<f64> {
 }
 
 type EstSegment = Vec<Vec<f64>>;
-fn process_segment(x:ArrayView2<f64>, burst_coords:&BurstEntry, swath:usize, ant:&ArrToArr,
-		   split_index:&[f64], o_value:f64, hyper:&HyperParams, ) -> (EstSegment, EstSegment){
+fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, ant:ArrToArr,
+		   split_index:Arc<Vec<f64>>, o_value:f64, hyper:Arc<HyperParams> ) -> (EstSegment, EstSegment){
     let padding:usize = 40;
     let num_subswaths = 5; // TODO: fix
 
@@ -384,9 +423,11 @@ fn process_segment(x:ArrayView2<f64>, burst_coords:&BurstEntry, swath:usize, ant
 }
 
 /// Processes the segments in the splits/ bursts and 
-pub fn select_and_estimate_segments(x:ArrayView2<f64>, mp_dict:&Vec<Vec<ArrToArr>>,
-				    burst_coords:&Vec<Vec<BurstEntry>>, split_indices:&MidPoint,
-				    o_list:&Vec<Vec<f64>>, hyper:&HyperParams,
+pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>,
+				    burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
+				    split_indices:&MidPoint,
+				    o_list:Vec<Vec<f64>>,
+				    hyper:Arc<HyperParams>,
 				    id:&SentinelFormatId) -> Vec<Vec<crate::est_lp::lin_params>>{
     let num_subswaths:usize = get_num_subswath!(id);
     let mut ret = vec![Vec::new();num_subswaths];
@@ -394,9 +435,48 @@ pub fn select_and_estimate_segments(x:ArrayView2<f64>, mp_dict:&Vec<Vec<ArrToArr
 	MidPoint::Est(splitind) => {
 	    for swath in 0..num_subswaths {
 		let n_splits:usize = splitind[swath][0].len() + 1;
-		let mut lreal:EstSegment = vec![Vec::new();n_splits];
-		let mut lant:EstSegment = vec![Vec::new();n_splits];
+		let mut lreal:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
+		let mut lant:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
 
+		/*let thread_closures:Vec<Box<Fn() -> ()  >> = (0..burst_coords[swath].len()).map(
+		    |e| {
+			Box::new(move | | {
+			    let (mut real, mut ant) = process_segment(x.clone(), &burst_coords[swath][e], swath, &mp_dict[swath][e], &splitind[swath][e], o_list[swath][e], hyper);
+			    for i in (0..n_splits).rev() {
+				lreal.lock().unwrap()[i].extend(real.pop().unwrap());
+				lant.lock().unwrap()[i].extend(ant.pop().unwrap());
+			    }
+			})
+	    }).collect();*/
+
+		let mut thread_handles:Vec<_> = (0..burst_coords[swath].len()).map(
+		    |e| { // Clone reference counters.
+			let x_ = x.clone();
+			let hyper_ = hyper.clone();
+			let burst = burst_coords[swath][e].clone();
+			let o = o_list[swath][e];
+			let _lreal =  lreal.clone();
+			let _lant = lant.clone();
+			let mp = mp_dict[swath][e].clone();
+			let sind = splitind[swath][e].clone();
+			thread::spawn(move || {
+			    let (mut real, mut ant) = process_segment(x_, burst, swath, mp, sind, o, hyper_);
+			    for i in (0..n_splits).rev() {
+				_lreal.lock().unwrap()[i].extend(real.pop().unwrap());
+				_lant.lock().unwrap()[i].extend(ant.pop().unwrap());
+			    }
+			})
+		    }).collect();
+
+		let b = thread_handles.len();
+		for i in 0..b {thread_handles.pop().unwrap().join();}
+
+		//let handles = (0..burst_coords[swath].len())
+		 //   .map(|x| {thread::spawn(thread_closures[x])});
+		
+		    
+		    
+		/*
 		for (e,burst) in burst_coords[swath].iter().enumerate() {
 		    let (mut real, mut ant) = process_segment(x.clone(), burst, swath, &mp_dict[swath][e], &splitind[swath][e], o_list[swath][e], hyper);
 
@@ -404,10 +484,10 @@ pub fn select_and_estimate_segments(x:ArrayView2<f64>, mp_dict:&Vec<Vec<ArrToArr
 			lreal[i].extend(real.pop().unwrap());
 			lant[i].extend(ant.pop().unwrap());
 		    }
-		}
+		}*/
 
-		ret.push(
-		   lreal.iter().zip(lant.iter()).map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
+		//ret.push(
+		//   lreal.iter().zip(lant.iter()).map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
 		
 	    }
 	}

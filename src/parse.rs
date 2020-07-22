@@ -16,7 +16,7 @@ use std::collections::HashSet;
 // Linear algebra
 use lapack::*;
 use blas::*;
-
+use std::sync::Arc;
 
 pub struct NoiseField {
     pub data:Array2<f64>
@@ -1016,7 +1016,7 @@ struct RawBurst {
 
 /// Tracks the givne burst entries.
 impl BurstEntry {
-    pub fn create_burst_coords (filebuffer:&str, time_row_lut:&TimeRowLut, swath_bounds:&Vec<Vec<SwathElem>>, sentformat:&SentinelFormatId) -> Vec<Vec<BurstEntry>> {
+    pub fn create_burst_coords (filebuffer:&str, time_row_lut:&TimeRowLut, swath_bounds:&Vec<Vec<SwathElem>>, sentformat:&SentinelFormatId) -> Vec<Vec<Arc<BurstEntry>>> {
 	let mut reader = Reader::from_str(filebuffer);
 	let burst_keys:[Box<&[u8]>; 3] = [Box::new(b"product"),
                                           Box::new(b"antennaPattern"),
@@ -1031,7 +1031,7 @@ impl BurstEntry {
 	    _ => panic!("Incorrect sentmode")
 	};
 
-	let mut burst_coords:Vec<Vec<BurstEntry>> = vec![Vec::new();num_subswaths];
+	let mut burst_coords:Vec<Vec<Arc<BurstEntry>>> = vec![Vec::new();num_subswaths];
 
 	for cur_swath in 0..num_subswaths {
 	    let mut raw_it = raw_burst_entries.iter().filter(|s| s.0 == cur_swath).peekable();
@@ -1081,11 +1081,12 @@ impl BurstEntry {
 
 		
 		burst_coords[cur_swath].push(
-		    BurstEntry {
+		    Arc::new(
+			BurstEntry {
 			fa:startrow,
 			la:endrow,
 			fr:startcol_.unwrap(),
-			lr:endcol_.unwrap()});
+			lr:endcol_.unwrap()}));
 	    }
 	}
 	burst_coords

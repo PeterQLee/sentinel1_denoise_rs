@@ -42,8 +42,12 @@ features = ["extension-module"]
 name = "denoise_engine"
 path = "src/lib.rs"
 
-# [[bin]]
-# name = "noise_to_tiff"
-# path = "src/noise_to_tiff.rs"
+#[[bin]]
+#name = "noise_to_tiff"
+#path = "src/noise_to_tiff.rs"
+
+[[bin]]
+name = "test_mt"
+path= "src/test_mt.rs"
 
 
