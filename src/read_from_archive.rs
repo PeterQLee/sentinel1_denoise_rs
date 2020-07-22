@@ -40,7 +40,7 @@ pub enum SentinelArchiveOutput{
  
 
 impl SentinelFormatId {
-    fn create_crosspol_annotation(&self) -> String {
+    pub fn create_crosspol_annotation(&self) -> String {
         let polid;
         let upemit;
         
@@ -115,7 +115,7 @@ impl SentinelFormatId {
 /// Get the dateid prefix for the relevant files.
 ///ex: S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.SAFE-report-20180902T190505.pdf
 /// Returns (Uppercase string, lowercase dateid, sentinelid[a or b])
-fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
+pub fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
     // Takes the pdf name as inputg
     let pdf_re = Regex::new(r"^S1[A|B]_[IE]W_GRD._1SD[H|V]_.*\.SAFE/S1([A|B])_([EI]W)_GRD(.)_1SD([H|V])_(.*)\.SAFE.*\.pdf$").unwrap();
     if pdf_re.is_match(token) {

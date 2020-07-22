@@ -1,4 +1,4 @@
-extern crate denoise_engine;
+/*extern crate denoise_engine;
 use denoise_engine::parse::{NoiseField, SwathElem};
 use denoise_engine::read_from_archive::get_data_from_zip_path;
 use denoise_engine::apply::{apply_swath_scale, prep_measurement, restore_scale};
@@ -242,3 +242,4 @@ fn test_load_y(){
         }
     }
 }
+*/

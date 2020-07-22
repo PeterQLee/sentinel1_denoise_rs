@@ -12,7 +12,10 @@ use rayon::prelude::*;
 use chrono::prelude::*;
 use crate::read_from_archive::SentinelFormatId;
 
-
+use std::collections::HashSet;
+// Linear algebra
+use lapack::*;
+use blas::*;
 
 
 pub struct NoiseField {
@@ -33,11 +36,21 @@ pub struct SwathElem {
     pub lr:usize
 }
 
-
-pub struct ParseAnnotation {
+macro_rules! min_row {
+    ($sw:expr) => {
+	$sw.iter().fold(99999, |acc,x| {
+	    if x.fa < acc {return x.fa;}
+	    acc});
+    };
 }
 
-
+macro_rules! max_row {
+    ($sw:expr) => {
+	$sw.iter().fold(0, |acc,x| {
+	    if x.la > acc {return x.la;}
+	    acc});
+    };
+}
 
 
 
@@ -519,13 +532,12 @@ impl SwathElem {
     /// Creates an nested vector of swath elems and the period for each subswath
     pub fn new(filebuffer:&str, sentformat:&SentinelFormatId) -> (Vec<Vec<SwathElem>>, Vec<usize>) {
         let mut reader = Reader::from_str(filebuffer);
-	let mut NUM_SUBSWATHS:usize = 5;
 
-	match sentformat.sentmode.as_str() {
-	    "EW" => {NUM_SUBSWATHS = 5},
-	    "IW" => {NUM_SUBSWATHS = 3},
+	let num_subswaths:usize = match sentformat.sentmode.as_str() {
+	    "EW" => {5},
+	    "IW" => {3},
 	    _ => panic!("Incorrect sentmode")
-	}
+	};
 
         let swath_keys:[Box<&[u8]>; 3] = [Box::new(b"product"), 
                                           Box::new(b"swathMerging"),
@@ -540,13 +552,13 @@ impl SwathElem {
         // get subswaths
         let swath_bounds = seek_to_list(&swath_keys, &mut reader, SwathElem::parse_swath_elem);
         reader = Reader::from_str(filebuffer);
-        let mut w = vec![0_usize;NUM_SUBSWATHS];
+        let mut w = vec![0_usize;num_subswaths];
         
         // get number of bursts
         let number_count = seek_to_list(&burst_keys, &mut reader, SwathElem::parse_burst);
 
 
-        let number_burst:Vec<usize> = (1..NUM_SUBSWATHS+1).map(
+        let number_burst:Vec<usize> = (1..num_subswaths+1).map(
             |a| number_count.iter().fold(
                 0, |acc, x| if *x == a {acc+1} else {acc}) - 1).collect(); //number of antenna elements - 1
 
@@ -554,7 +566,7 @@ impl SwathElem {
 
         // compute period.
 
-        for a in 0..NUM_SUBSWATHS {
+        for a in 0..num_subswaths {
             let min_az = swath_bounds[a].iter().fold(99999, |acc, x| if x.fa <= acc {x.fa} else {acc});// min
             let max_az = swath_bounds[a].iter().fold(0, |acc, x| if x.la >= acc {x.la} else {acc});// max
 
@@ -718,16 +730,18 @@ impl SwathElem {
 
 
 
-
- struct TimeRow {
-	row:usize,
-	col:usize,
-	aztime:f64
+#[derive(Debug,Clone)]
+ pub struct TimeRow {
+     pub row:usize,
+     pub col:usize,
+     pub elevangle:f64,
+     pub aztime:f64
  }
 
 
 
-struct TimeRowLut {
+pub struct TimeRowLut {
+    pub lut:Vec<Vec<TimeRow>>
 }
 
 impl TimeRowLut {
@@ -736,40 +750,49 @@ impl TimeRowLut {
     /// Time delta of the given azimuth time
   //  fn strtime_to_f64(aztime:&str) -> Result<f64, >{
     fn strtime_to_f64(aztime:&str) -> Result<f64, chrono::format::ParseError>{
-
-	
-	//base = datetime.datetime(2014, 1, 1) # This is before the launch date of sentinel 1
-	//dt = datetime.datetime.strptime(aztime, "%Y-%m-%dT%H:%M:%S.%f")
-	//return (dt - base).total_seconds()
 	let base =  Utc.ymd(2014, 1, 1).and_hms_milli(0, 0, 0, 0);
-	let dt = (aztime).parse::<DateTime<Utc>>()?;
+	let dt = Utc.datetime_from_str(aztime, "%Y-%m-%dT%H:%M:%S%.f")?;
 	let g = dt.signed_duration_since(base);
 	match g.to_std() {
 	    Ok(s) => Ok(s.as_secs_f64()),
-	    Err(e) => panic!("XML file malformed (impossible date time)")
+	    Err(e) => panic!("XML file malformed (impossible date time): {}",e)
 	}
 
     }
     ///Return a full lookup table
-    fn new(filebuffer:&str, swath_bounds:&Vec<SwathElem>, sentformat:&SentinelFormatId) {
+    pub fn new(filebuffer:&str, swath_bounds:&Vec<Vec<SwathElem>>, sentformat:&SentinelFormatId) -> TimeRowLut{
 	let mut reader = Reader::from_str(filebuffer);
-	let keys:[Box<&[u8]>;2] = [Box::new(b"newgeolocationGrid"),
+	let keys:[Box<&[u8]>;2] = [Box::new(b"geolocationGrid"),
 				   Box::new(b"geolocationGridPointList")
 
 	];
 
+	// Parse out TimeRow info from geo-coordinates
 	let time_list = seek_to_list(&keys, &mut reader, TimeRowLut::parse_geo);
-	//swath:TimeRowLut::find_swath(swath_bounds, line, pixel, sentformat);
+
+	let num_subswaths = match sentformat.sentmode.as_str() {
+	    "EW" => {5},
+	    "IW" => {3},
+	    _ => panic!("Incorrect sentmode")
+	};
+
+	let mut lut:Vec<Vec<TimeRow>> = vec![Vec::new();num_subswaths];
+	let _g = time_list.iter().for_each(|a| (TimeRowLut::find_best_subswath(&a, swath_bounds, &mut lut)));
+
+	TimeRowLut{lut:lut}
+
     }
 
-    ///Returns the oriignal lookuptable from the geocoordinate points.
+
+    ///Returns the orignal lookuptable from the geocoordinate points.
     fn parse_geo(reader:&mut Reader<&[u8]>) -> TimeRow {
-	enum ExtractState { Line, Pixel, AzimuthTime, None};
+	enum ExtractState { Line, Pixel, ElevationAngle, AzimuthTime, None};
 	let mut state = ExtractState::None;
 
 	let mut line:usize = 99999;
 	let mut pixel:usize = 99999;
 	let mut az_time:f64 = 0.0;
+	let mut angle:f64 = 0.0;
 
 	let mut buf = Vec::new();
 	
@@ -780,6 +803,7 @@ impl TimeRowLut {
                     match e.name() {
                         b"line" => {state = ExtractState::Line},
 			b"pixel" => {state = ExtractState::Pixel},
+			b"elevationAngle" => {state = ExtractState::ElevationAngle},
 			b"azimuthTime" => {state = ExtractState::AzimuthTime},
                         _ => {},
                     }
@@ -808,6 +832,13 @@ impl TimeRowLut {
 				Err(_e) => panic!("Malformed xml file (Azimuth time)")
 			    }
                         }
+			ExtractState::ElevationAngle => {
+			    let val = str::from_utf8(&e.unescaped().unwrap()).unwrap().parse::<f64>();
+                            match val {
+                                Ok(v) => angle = v,
+                                Err(_e) => panic!("Malformed xml file")
+                            };
+			}
                         ExtractState::None => {}
                     }
                 }
@@ -818,6 +849,7 @@ impl TimeRowLut {
 			b"line" => {state = ExtractState::None},
 			b"pixel" => {state = ExtractState::None},
 			b"azimuthTime" => {state = ExtractState::None},
+			b"elevationAngle" => {state = ExtractState::None},
                         b"geolocationGridPoint" => {break},
                         _ => {},
                     }
@@ -831,8 +863,519 @@ impl TimeRowLut {
 	TimeRow {
 	    row:line,
 	    col:pixel,
+	    elevangle:angle,
 	    aztime:az_time,
 	}
     }
+
+    /// Reorders timerow to most appopriate subswath
+    fn find_best_subswath(a:&TimeRow, swath_bounds:&Vec<Vec<SwathElem>>, lut:&mut Vec<Vec<TimeRow>>) {
+	for (e, swath) in swath_bounds.iter().enumerate() {
+	    for s_elem in swath.iter() {
+		if a.row >= s_elem.fa && a.row <= s_elem.la && a.col >= s_elem.fr && a.col <= s_elem.lr {
+		    lut[e].push(a.clone());
+		    return;
+		}
+	    }
+	}
+
+	for (e, swath) in swath_bounds.iter().enumerate() {
+	// we did not find the the subswath in bounds. Now search from the most appropriate row.
+	    let s_elem = &swath[0];
+	    if a.col >= s_elem.fr && a.col <= s_elem.lr {
+		lut[e].push(a.clone());
+		return;
+	    }
+	}
+	
+	panic!("Could not find suitable subswath for geo-coordinates");
+    }
+    
+    fn polyfit_4(x:&[f64], y:&[f64]) -> (f64, f64, f64, f64, f64) {
+	let n = x.len(); // number of equations
+	let k = 4; // degree of polynomial
+	let mut A = vec![0.0;(k+1)*(k+1)];
+	let mut b = vec![0.0;(k+1)];
+
+	for i in 0..k+1 {
+	    b[i] = x.iter().zip(y.iter()).fold(0.0, |acc, s| acc+(s.0.powi(i as i32))*s.1);
+	    for j in 0..k+1 {
+		// Note the reverse row/col order to satisfy the fortran routines.
+		A[j*(k+1) + i] = x.iter().fold(0.0, |acc, s| acc + s.powi((i+j) as i32));
+	    }
+	}
+
+	// Solve linear system.
+	let mut INFO:i32 = 0;
+	let mut IPIV:Vec<i32> = vec![0;k+1];
+	// dgesv (square system)
+	unsafe {
+	    dgesv((k+1) as i32,//num eqs
+		  1 as i32,//num eqs
+		  &mut A,
+		  (k+1) as i32,//leading dim of A
+		  &mut IPIV,//pivot matrix
+		  &mut b,/////// right hand side
+		  (k+1) as i32,//LDB
+		  &mut INFO);
+	}
+	assert!(INFO == 0);
+	(b[0], b[1], b[2], b[3], b[4])
+    }
+
+    /// Return a closure that is applied to interpolate the values.
+    pub fn interp_angle_to_col(&self)  -> Box<Fn(&[f64], usize) -> Vec<f64>>
+    {
+	// determine unique row entries
+	let mut unique_rows = HashSet::new();
+	for swath in self.lut.iter() {
+	    for ent in swath.iter() {
+		unique_rows.insert(ent.row);
+	    }
+	}
+	let mut s_rows:Vec<_> =  unique_rows.into_iter().collect();
+	s_rows.sort();
+	let mut coef = vec![(0.0,0.0,0.0,0.0,0.0); s_rows.len()];
+	    
+	for (i,r) in s_rows.iter().enumerate() {
+	    let mut ang_arr = Vec::new();
+	    let mut col_arr = Vec::new();
+	    
+	    for swath in self.lut.iter() {
+		for ent in swath.iter() {
+		    if ent.row == *r {
+			ang_arr.push(ent.elevangle);
+			col_arr.push(ent.col as f64);
+		    }
+		}
+	    }
+	    // fit parameters for a 4th degree polynomial
+	   coef[i] = TimeRowLut::polyfit_4(&ang_arr, &col_arr);
+	}
+
+	
+	fn get_two_best(r_list:&[usize], r:i64) -> (usize, usize) {
+	    let mut first_best:i64 = 9999999;
+	    let mut first_ind = 0;
+	    let mut second_best:i64 = 9999999;
+	    let mut second_ind = 0;
+	    for (e,a) in r_list.iter().enumerate() {
+		let val = ((*a as i64) - r).abs();
+		if  val < first_best {
+		    second_best = first_best;
+		    second_ind = first_ind;
+		    first_best = val;
+		    first_ind = e;
+		}
+		else if val < second_best {
+		    second_best = val;
+		    second_ind = e;
+		}
+	    }
+
+	    return (first_ind, second_ind);
+	    
+	    
+	}
+	let s_rows_ex = s_rows.clone();
+	let coef_ex = coef.clone();
+
+	Box::new(move |angle:&[f64], row:usize| {
+	     let (a_ind, b_ind) = get_two_best(&s_rows_ex, row as i64);
+	     let x_l = angle;
+	     let mut cf = coef_ex[a_ind];
+	     let v1:Vec<_> = x_l.iter().map(|x| (cf.4)*x.powi(4) + (cf.3)*x.powi(3) + (cf.2)*x.powi(2) + (cf.1)*x.powi(1) + cf.0).collect();
+	     cf = coef_ex[b_ind];
+	     let v2:Vec<_> = x_l.iter().map(|x| (cf.4)*x.powi(4) + (cf.3)*x.powi(3) + (cf.2)*x.powi(2) + (cf.1)*x.powi(1) + cf.0).collect();
+
+	     let slope:Vec<_> = v2.iter().zip(v1.iter()).map(|z|
+						      (z.0 - z.1)/(s_rows_ex[b_ind] as f64 - s_rows_ex[a_ind] as f64)).collect();
+
+	     v1.iter().zip(slope.iter()).map(|z| z.0 + z.1*(row as f64 - s_rows_ex[a_ind] as f64)).collect()
+
+	 })
+	
+    }
+}
+
+
+
+
+#[derive(Clone, Debug)]
+pub struct BurstEntry {
+    pub fa:usize,
+    pub la:usize,
+    pub fr:usize,
+    pub lr:usize
+}
+
+struct RawBurst {
+    aztime:f64
+}
+
+
+/// Tracks the givne burst entries.
+impl BurstEntry {
+    pub fn create_burst_coords (filebuffer:&str, time_row_lut:&TimeRowLut, swath_bounds:&Vec<Vec<SwathElem>>, sentformat:&SentinelFormatId) -> Vec<Vec<BurstEntry>> {
+	let mut reader = Reader::from_str(filebuffer);
+	let burst_keys:[Box<&[u8]>; 3] = [Box::new(b"product"),
+                                          Box::new(b"antennaPattern"),
+                                          Box::new(b"antennaPatternList")];
+
+	// Raw burst entries that are still mapped to aztimes
+        let raw_burst_entries = seek_to_list(&burst_keys, &mut reader, BurstEntry::parse_burst);
+
+	let num_subswaths:usize = match sentformat.sentmode.as_str() {
+	    "EW" => {5},
+	    "IW" => {3},
+	    _ => panic!("Incorrect sentmode")
+	};
+
+	let mut burst_coords:Vec<Vec<BurstEntry>> = vec![Vec::new();num_subswaths];
+
+	for cur_swath in 0..num_subswaths {
+	    let mut raw_it = raw_burst_entries.iter().filter(|s| s.0 == cur_swath).peekable();
+	    // TODO: ensure that last element is not taken.
+	    loop {
+		let m = raw_it.next().unwrap();
+		let item = &m.1;
+		let aztime = item.aztime;
+		
+		let next_item = raw_it.peek();
+		let next_aztime = match next_item {
+		    Some(nt) => {nt.1.aztime},
+		    None => {break}
+		};
+		
+		let (startrow, endrow) = BurstEntry::lookup_row_from_aztime(aztime, next_aztime, cur_swath, time_row_lut);
+
+		// Identify columns.
+		let mut startcol_:Option<usize> = None;
+		let mut endcol_:Option<usize> = None;
+
+		for sw_elem in swath_bounds[cur_swath].iter() {
+		    if startrow >= sw_elem.fa && startrow <= sw_elem.la {
+			startcol_ = Some(sw_elem.fr);
+			endcol_ = Some(sw_elem.lr);
+		    }
+		}
+
+		let minrow = min_row!((swath_bounds[cur_swath]));
+		let maxrow = max_row!((swath_bounds[cur_swath]));
+		// Couldn't find one in range.
+		if startcol_.is_none() {
+		    if startrow < minrow {
+			startcol_ = Some(swath_bounds[cur_swath][0].fr);
+			endcol_ = Some(swath_bounds[cur_swath][0].lr);
+		    }
+		    else if startrow > maxrow{
+			startcol_ = Some(swath_bounds[cur_swath].last().unwrap().fr);
+			endcol_ = Some(swath_bounds[cur_swath].last().unwrap().lr);
+
+		    }
+		    else {
+			panic!("Failure in matching subswaths in burst resolution");
+		    }
+			
+		}
+
+		
+		burst_coords[cur_swath].push(
+		    BurstEntry {
+			fa:startrow,
+			la:endrow,
+			fr:startcol_.unwrap(),
+			lr:endcol_.unwrap()});
+	    }
+	}
+	burst_coords
+    }
+
+    /// TODO : lookup the row based on aztime.
+    fn lookup_row_from_aztime(aztime:f64, nextaztime:f64, swath:usize, time_row_lut:&TimeRowLut) -> (usize, usize) {
+
+	// Obtain the change in time between each of the lut entries
+	let delta_vals:Vec<f64> = time_row_lut.lut[swath].iter().map(|s| aztime - s.aztime ).collect();
+
+	let mut best_ind = 0;
+	let mut best_val:f64 = 99999.0;
+	let mut found:bool = false;
+	for (e,d) in delta_vals.iter().enumerate() {
+	    if d.abs() < best_val.abs() {
+		best_ind = e;
+		best_val = *d;
+		found = true;
+	    }
+	}
+	if !found {panic!("Could not resolve lookup table");}
+	
+	let cur_row = time_row_lut.lut[swath][best_ind].row;
+
+	// find the next closest row with matching column
+	let mut next_row = 9999999;
+	let mut next_ind = 9999999;
+	found = false;
+	    
+	for (e, xd) in time_row_lut.lut[swath].iter().enumerate() {
+            if e == best_ind || xd.row == cur_row {continue}
+            if xd.row > cur_row {
+		if xd.row < next_row {
+                    next_row = xd.row;
+		    next_ind = e;
+		    found = true;
+		}
+	    }
+	}
+	if !found {panic!("Could not resolve lookup table");}
+
+	// find the lowest corresponding time column that matches this row
+	// this ensures that our interpolation will be more accurate
+	let mut cur_ind = 0;
+	let mut cur_col = 10000000;
+	let mut next_ind = 0;
+	let mut next_col = 10000000;
+	found = false;
+	let mut found0 = false;
+	for (e, sb) in time_row_lut.lut[swath].iter().enumerate() {
+            if sb.row == cur_row {
+		if sb.col < cur_col{
+		    cur_ind = e;
+                    cur_col = sb.col;
+		    found = true;
+		}
+	    }
+            if sb.row == next_row {
+		if sb.col < next_col {
+                    next_ind = e;
+                    next_col = sb.col;
+		    found0 = true;
+		}
+	    }
+	}
+	if !found || !found0 {panic!("Could not resolve lookup table");}
+
+	let slope:f64 = (time_row_lut.lut[swath][next_ind].row - time_row_lut.lut[swath][cur_ind].row) as f64/
+            (time_row_lut.lut[swath][next_ind].aztime - time_row_lut.lut[swath][cur_ind].aztime);
+	
+        
+
+	let startrow = (time_row_lut.lut[swath][cur_ind].row as f64 + slope*(aztime - time_row_lut.lut[swath][cur_ind].aztime as f64).max(0.0)) as usize;
+	
+	let endrow = (time_row_lut.lut[swath][cur_ind].row as f64 + slope*(nextaztime - time_row_lut.lut[swath][cur_ind].aztime) as f64) as usize;
+	//Interpolate between rows.
+
+	(startrow, endrow)
+    }
+
+
+    
+    /// Parse burst information
+    fn parse_burst(reader:&mut Reader<&[u8]>) -> (usize, RawBurst) {
+        
+        let mut subswath:usize = 0;
+	let mut az_time:f64 = 0.0;
+        let mut buf = Vec::new();
+        enum BurstState {Swath, At, None};
+        let mut state = BurstState::None;
+        loop {
+            match reader.read_event(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = BurstState::Swath},
+			b"azimuthTime" => {state = BurstState::At},
+                        _ => {},
+                    }
+                }
+
+                Ok(Event::Text(ref e)) => {
+                    match state {
+                        BurstState::Swath => {
+                            match  str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(val) =>
+                                    match val.bytes().nth(2) {
+                                        Some(u) => {
+                                            let v = (u - ('0' as u8)) as usize;
+                                            subswath = v - 1;
+                                        }
+                                        None => panic!("Malformed xml file")
+                                    }
+                                Err(_e) => panic!("Malformed xml file")
+                            }
+                        },
+			
+			BurstState::At => {
+			    match TimeRowLut::strtime_to_f64(str::from_utf8(&e.unescaped().unwrap()).unwrap()) {
+				Ok(v) => az_time = v,
+				Err(_e) => panic!("Malformed xml file (Azimuth time)")
+			    }
+			},
+			
+                        BurstState::None => {}
+                    }
+                }
+                    
+
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = BurstState::None},
+			b"azimuthTime" => {state = BurstState::None},
+                        b"antennaPattern" => {break;},
+                        _ => {},
+                    }
+                },
+                
+                _ => {}
+            }
+        }
+	(subswath, RawBurst{aztime:az_time})
+        
+    }
+
+}
+
+
+pub struct RawPattern {
+    pub angle:Vec<Vec<Vec<f64>>>,
+    pub pattern:Vec<Vec<Vec<f64>>>
+}
+
+/// Raw Pattern directly from the xml files.
+impl RawPattern {
+    pub fn new(filebuffer:&str, sentformat:&SentinelFormatId) -> RawPattern{
+	let mut reader = Reader::from_str(filebuffer);
+	let burst_keys:[Box<&[u8]>; 3] = [Box::new(b"product"),
+                                          Box::new(b"antennaPattern"),
+                                          Box::new(b"antennaPatternList")];
+
+	let num_subswaths:usize = match sentformat.sentmode.as_str() {
+	    "EW" => {5},
+	    "IW" => {3},
+	    _ => panic!("Incorrect sentmode")
+	};
+	
+	let raw_pattern_entries = seek_to_list(&burst_keys, &mut reader, RawPattern::parse_burst);
+	
+	let mut angle:Vec<Vec<Vec<f64>>> = vec![Vec::new(); num_subswaths];
+	let mut pattern:Vec<Vec<Vec<f64>>> = vec![Vec::new(); num_subswaths];
+
+	for (ss, ang, patt) in raw_pattern_entries {
+	    angle[ss].push(ang.clone());
+	    pattern[ss].push(patt.clone());
+	}
+
+	RawPattern {
+	    angle:angle,
+	    pattern:pattern
+	}
+	
+    }
+
+    /// Parse burst information
+    fn parse_burst(reader:&mut Reader<&[u8]>) -> (usize, Vec<f64>, Vec<f64>) {
+	let ANTNORM:f64 = 43.3_f64.exp();
+        let mut subswath:usize = 0;
+	let mut angle:Vec<f64> = Vec::new();
+	let mut pattern:Vec<f64> = Vec::new();
+        let mut buf = Vec::new();
+        enum BurstState {Swath, Pattern, Angle, None};
+        let mut state = BurstState::None;
+        loop {
+            match reader.read_event(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = BurstState::Swath},
+			b"elevationPattern" => {state = BurstState::Pattern},
+			b"elevationAngle" => {state = BurstState::Angle},
+                        _ => {},
+                    }
+                }
+
+                Ok(Event::Text(ref e)) => {
+                    match state {
+                        BurstState::Swath => {
+                            match  str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(val) =>
+                                    match val.bytes().nth(2) {
+                                        Some(u) => {
+                                            let v = (u - ('0' as u8)) as usize;
+                                            subswath = v - 1;
+                                        }
+                                        None => panic!("Malformed xml file")
+                                    }
+                                Err(_e) => panic!("Malformed xml file")
+                            }
+                        },
+			/* Derive the amplitude of the wave by taking absolute
+			of intensity and phase components */
+			BurstState::Pattern => {
+			    match  str::from_utf8(&e.unescaped().unwrap()) {
+                                Ok(val) => {
+				    let mut v_vals = val.split_whitespace();
+				    loop {
+					let real_ = v_vals.next();
+					let imag_ = v_vals.next();
+					match real_ {
+					    Some(real_s) => {
+						let imag_s = imag_.unwrap();
+						let real = real_s.parse::<f64>().unwrap()/ANTNORM;
+						let imag = imag_s.parse::<f64>().unwrap()/ANTNORM;
+						
+						pattern.push((real*real + imag*imag).sqrt());
+					    }
+					    None => {
+						break;
+					    }
+					}
+					
+				    }
+				}
+                                Err(_e) => panic!("Malformed xml file")
+                            }
+			}
+			
+			BurstState::Angle => {
+			    match  str::from_utf8(&e.unescaped().unwrap()) {
+				Ok(val) => {
+				    let mut v_vals = val.split_whitespace();
+				    loop {
+					let real_ = v_vals.next();
+					match real_ {
+					    Some(real_s) => {
+						let real = real_s.parse::<f64>().unwrap();
+						angle.push(real);
+					    }
+					    None => {
+						break;
+					    }
+					}
+					
+				    }
+				}
+                                Err(_e) => panic!("Malformed xml file")
+                            }
+			}
+
+                        BurstState::None => {}
+                    }
+                }
+                    
+
+                Ok(Event::End(ref e)) => {
+                    match e.name() {
+                        b"swath" => {state = BurstState::None},
+			b"elevationPattern" => {state = BurstState::None},
+			b"elevationAngle" => {state = BurstState::None},
+                        b"antennaPattern" => {break;},
+                        _ => {},
+                    }
+                },
+                
+                _ => {}
+            }
+        }
+	(subswath, angle, pattern)
+        
+    }
+
 }
 

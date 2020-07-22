@@ -1,4 +1,4 @@
-extern crate denoise_engine;
+/*extern crate denoise_engine;
 use denoise_engine::parse::{NoiseField, SwathElem};
 use std::fs;
 use ndarray::{Array1, Array2, Array3, ArrayD};
@@ -77,3 +77,4 @@ fn subswath_bounds() {
     }
 }
 
+*/

@@ -1,4 +1,4 @@
-extern crate denoise_engine;
+/*extern crate denoise_engine;
 use denoise_engine::parse::{NoiseField, SwathElem};
 use denoise_engine::estimate::*;
 use std::io::prelude::*;
@@ -81,3 +81,4 @@ fn test_k_est() {
                                   mu, gamma, lambda_, lambda2_);
     println!("{:?}",kvals);
 }
+*/

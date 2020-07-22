@@ -25,6 +25,7 @@ tiff = "0.4.0"
 libc = "*"
 numpy = "0.7.0"
 chrono = "*"
+rustfft = "3.0.1"
 
 
 [dependencies.pyo3]
@@ -32,13 +33,13 @@ version = "0.8"
 features = ["extension-module"]
 
 
-# [lib]
+[lib]
 # crate-type = ["staticlib", "cdylib"]
-# name = "denoise_engine"
-# path = "src/lib.rs"
+name = "denoise_engine"
+path = "src/lib.rs"
 
-[[bin]]
-name = "noise_to_tiff"
-path = "src/noise_to_tiff.rs"
+# [[bin]]
+# name = "noise_to_tiff"
+# path = "src/noise_to_tiff.rs"
 
 

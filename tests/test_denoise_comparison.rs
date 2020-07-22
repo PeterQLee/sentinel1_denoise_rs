@@ -1,4 +1,4 @@
-extern crate denoise_engine;
+/* extern crate denoise_engine;
 use denoise_engine::parse::{NoiseField, SwathElem};
 use denoise_engine::apply::apply_swath_scale;
 use denoise_engine::estimate::*;
@@ -79,3 +79,4 @@ fn apply_comparison() {
         }
     }
 }
+*/
