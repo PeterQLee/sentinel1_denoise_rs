@@ -28,6 +28,10 @@ chrono = "*"
 rustfft = "3.0.1"
 
 
+[build-dependencies]
+pkg-config = "0.3.16"
+
+
 [dependencies.pyo3]
 version = "0.8"
 features = ["extension-module"]

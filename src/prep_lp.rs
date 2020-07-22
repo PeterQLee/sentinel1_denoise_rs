@@ -4,6 +4,7 @@
 use crate::parse::{NoiseField, SwathElem, BurstEntry, TimeRowLut, RawPattern};
 use crate::read_from_archive::SentinelFormatId;
 use lapack::*;
+use std::sync::{Arc, Mutex};
 
 // FFT libs for fast convolution.
 use rustfft::FFTplanner;
@@ -355,7 +356,7 @@ fn process_segment(x:ArrayView2<f64>, burst_coords:&BurstEntry, swath:usize, ant
 	
 	for i in prev..nex {
 	    if filt_sl[i]-o_value <= 0.0 {continue;}
-	    lreal.push(filt_sl[i]-o_value.ln());
+	    lreal.push((filt_sl[i]-o_value).ln());
 	    lant.push(antvals[i].ln());
 	}
 
@@ -383,22 +384,30 @@ fn process_segment(x:ArrayView2<f64>, burst_coords:&BurstEntry, swath:usize, ant
 }
 
 /// Processes the segments in the splits/ bursts and 
-pub fn select_and_estimate_segments(x:ArrayView2<f64>, mp_dict:&Vec<Vec<ArrToArr>>, burst_coords:&Vec<Vec<BurstEntry>>, split_indices:&MidPoint, o_list:&Vec<Vec<f64>>, hyper:&HyperParams, id:&SentinelFormatId) -> Vec<Vec<crate::est_lp::lin_params>>{
+pub fn select_and_estimate_segments(x:ArrayView2<f64>, mp_dict:&Vec<Vec<ArrToArr>>,
+				    burst_coords:&Vec<Vec<BurstEntry>>, split_indices:&MidPoint,
+				    o_list:&Vec<Vec<f64>>, hyper:&HyperParams,
+				    id:&SentinelFormatId) -> Vec<Vec<crate::est_lp::lin_params>>{
     let num_subswaths:usize = get_num_subswath!(id);
     let mut ret = vec![Vec::new();num_subswaths];
     match split_indices {
 	MidPoint::Est(splitind) => {
 	    for swath in 0..num_subswaths {
-		let mut lreal = Vec::new();
-		let mut lant = Vec::new();
+		let n_splits:usize = splitind[swath][0].len() + 1;
+		let mut lreal:EstSegment = vec![Vec::new();n_splits];
+		let mut lant:EstSegment = vec![Vec::new();n_splits];
+
 		for (e,burst) in burst_coords[swath].iter().enumerate() {
-		    let (real, ant) = process_segment(x.clone(), burst, swath, &mp_dict[swath][e], &splitind[swath][e], o_list[swath][e], hyper);
-		    lreal.extend(real);
-		    lant.extend(ant);
+		    let (mut real, mut ant) = process_segment(x.clone(), burst, swath, &mp_dict[swath][e], &splitind[swath][e], o_list[swath][e], hyper);
+
+		    for i in (0..n_splits).rev() {
+			lreal[i].extend(real.pop().unwrap());
+			lant[i].extend(ant.pop().unwrap());
+		    }
 		}
 
 		ret.push(
-		    lreal.iter().zip(lant.iter()).map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
+		   lreal.iter().zip(lant.iter()).map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
 		
 	    }
 	}

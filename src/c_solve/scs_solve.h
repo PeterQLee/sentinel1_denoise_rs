@@ -1,9 +1,8 @@
-#include "glbopts.h"
-#include "amatrix.h"
-#include "cones.h"
-#include "linalg.h"
-#include "scs.h"
-#include "util.h"
+#include "scs/glbopts.h"
+#include "scs/cones.h"
+#include "scs/linalg.h"
+#include "scs/scs.h"
+#include "scs/util.h"
 #include <stdlib.h>
 
 /* Output results */

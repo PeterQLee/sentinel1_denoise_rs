@@ -15,17 +15,18 @@ pub fn solve_lp(lreal:&[f64], lant:&[f64]) -> lin_params {
     let mut b:Vec<f64> = vec![0.0;m];
     let mut c:Vec<f64> = vec![0.0;n];
 
+    // Prepare constraints
     // Note A is in column major order.
     for i in 0..lreal.len() {
 	A[i] = lant[i];
 	A[m + i] = 1.0;
 	b[i] = lreal[i];
     }
+
     A[lreal.len()] = 1.0;
     b[lreal.len()] = -0.75;
     A[lreal.len()+1] = -1.0;
     b[lreal.len()+1] = 1.25;
-    
 
     // compute gamma (use low_lp)
     let (minind, minval, __) = argmin_row!(lant);
@@ -34,9 +35,10 @@ pub fn solve_lp(lreal:&[f64], lant:&[f64]) -> lin_params {
     let percent = (vs - lreal[minind])/(lreal[maxind]-lreal[minind]);
     let gamma = (1.0-percent)*(maxval - minval) + minval;
 
-    c[0] = gamma;
-    c[1] = 1.0;
+    c[0] = -gamma;
+    c[1] = -1.0;
 
+    // Solve the problem
     unsafe {scs_solve_lp(n as std::os::raw::c_uint, m as std::os::raw::c_uint, A.as_mut_ptr(), b.as_mut_ptr(), c.as_mut_ptr())}
     
 }
