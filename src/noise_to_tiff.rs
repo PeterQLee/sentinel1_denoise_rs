@@ -1,7 +1,4 @@
-//extern crate openblas_src;
-//extern crate ndarray_linalg;
 extern crate denoise_engine;
-//extern crate openblas_src;
 
 use denoise_engine::parse::{NoiseField, SwathElem};
 use denoise_engine::read_from_archive::get_data_from_zip_path;
