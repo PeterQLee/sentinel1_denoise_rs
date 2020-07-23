@@ -1,8 +1,8 @@
 extern crate denoise_engine;
-use denoise_engine::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern};
+use denoise_engine::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern, HyperParams};
 use denoise_engine::prep_lp::*;
 use denoise_engine::read_from_archive::{SentinelFormatId,get_data_from_zip_path,  get_id_prefix, SentinelArchiveOutput};
-use denoise_engine::apply::{apply_swath_scale, prep_measurement, restore_scale};
+use denoise_engine::apply::{apply_swath_scale, prep_measurement, restore_scale, LpApply};
 use denoise_engine::estimate::*;
 use std::fs::File;
 use zip::read::{ZipArchive};
@@ -87,10 +87,10 @@ fn main() {
 				}
 			    }
 			    
-			    let hyper = HyperParams{
+			    let hyper:Arc<HyperParams> = Arc::new(HyperParams{
 				box_l:51,
 				add_pad:0
-			    };
+			    });
 
 			    let now = Instant::now();
 			    println!("STarting estimation");
@@ -100,15 +100,34 @@ fn main() {
 								      &bt,
 								      &split_indices,
 								      o_list,
-								      Arc::new(hyper),
+								      hyper.clone(),
 								      &id);
 			    println!("esttime = {}", now.elapsed().as_secs_f64());
+			    
 			    for i in params.iter() {
+				println!("Size = {}", i.len());
 				for j in i.iter() {
 				    println!("m={} b={}", j.m, j.b);
 				}
 			    }
 
+			    let (r_mp_dict, r_split_indices) = get_interpolation_pattern(&buffer,
+										     &bt,
+										     &lut,
+										     &rawpatt,
+										     &id,
+											 true
+			    );
+
+			    LpApply::apply_lp_noisefield(xv.clone(),
+							 r_mp_dict,
+							 &bt,
+							 &r_split_indices,
+							 &swath_bounds,
+							 &params,
+							 hyper.clone(),
+							 &id);
+						
 
                         }
 		    }

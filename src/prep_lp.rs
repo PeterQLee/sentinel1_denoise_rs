@@ -5,7 +5,7 @@ use crate::parse::{BurstEntry, TimeRowLut, RawPattern, HyperParams};
 use crate::read_from_archive::SentinelFormatId;
 use lapack::*;
 use std::sync::{Arc, Mutex};
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 // FFT libs for fast convolution.
 use rustfft::FFTplanner;
@@ -26,6 +26,12 @@ impl Index<(usize, usize)> for TwoDArray {
     ///column major order
     fn index(&self, x:(usize, usize)) -> &f64{
 	&self.data[x.0 + x.1*self.rows]
+    }
+}
+
+impl IndexMut<(usize, usize)> for TwoDArray {
+    fn index_mut(&mut self, x:(usize, usize)) -> &mut Self::Output {
+	&mut self.data[x.0 + x.1*self.rows]
     }
 }
 
@@ -428,7 +434,7 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 				    hyper:Arc<HyperParams>,
 				    id:&SentinelFormatId) -> Vec<Vec<crate::est_lp::lin_params>>{
     let num_subswaths:usize = get_num_subswath!(id);
-    let mut ret = vec![Vec::new();num_subswaths];
+    let mut ret:Vec<Vec<crate::est_lp::lin_params>> = Vec::with_capacity(num_subswaths);
     match split_indices {
 	MidPoint::Est(splitind) => {
 	    for swath in 0..num_subswaths {

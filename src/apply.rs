@@ -102,7 +102,7 @@ pub fn convert_to_f64_f32(x:ArrayView2<f64>) -> Array2<f32>{
 }
 
 
-struct LpApply{
+pub struct LpApply{
 }
 
 macro_rules! unpack_bound {
@@ -131,6 +131,9 @@ impl LpApply {
 	    let nex = lr.min(m.1.round() as usize);
 
 	    /* compute p_ant in this undisputed region */
+	    println!("pantsize = {}, max={}",p_ant.len(), nex-fr);
+	    println!("antsize = {}, max={}",ant.len(), nex-fr);
+	    println!("plen = {} {}",lin_params.len(),i);
 	    p_ant[prev-fr..nex-fr].iter_mut()
 		.zip(ant[prev-fr..nex-fr].iter())
 		.for_each(|x| *x.0 = lin_params[i].b.exp() * x.1.powf(lin_params[i].m));
@@ -166,6 +169,22 @@ impl LpApply {
 	return p_ant;
     }
 
+    fn subtract_along_burst(x: &mut TwoDArray,
+			    p_ant:&Vec<f64>,
+			    azimuth_noise:&TwoDArray,
+			    fa:usize,
+			    la:usize,
+			    fr:usize,
+			    lr:usize,
+			    
+    ) {
+	for i in fa..la {
+	    for j in fr..lr {
+		x[(i,j)] = x[(i,j)] - p_ant[i] * azimuth_noise[(i,j)];
+	    }
+	}
+    }
+
 
 
 
@@ -173,9 +192,9 @@ impl LpApply {
     /// without affine offsets.
     pub fn apply_lp_noisefield(x:Arc<TwoDArray>,
 			       mp_dict:Vec<Vec<ArrToArr>>,
-			       split_indices:&MidPoint,
 			       burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
-			       swath_bounds:&[&[SwathElem]],
+			       split_indices:&MidPoint,
+			       swath_bounds:&[Vec<SwathElem>],
 			       lin_params:&Vec<Vec<crate::est_lp::lin_params>>,
 			       hyper:Arc<HyperParams>,
 			       id:&SentinelFormatId) -> ()
