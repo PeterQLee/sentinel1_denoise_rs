@@ -1,4 +1,4 @@
-
+/// Module is responsible for extracting data directly from xml files.
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
@@ -1380,3 +1380,7 @@ impl RawPattern {
 
 }
 
+pub struct HyperParams {
+    pub box_l:usize,
+    pub add_pad:usize,//? where to pad the adjacent slices
+}

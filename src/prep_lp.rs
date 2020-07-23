@@ -1,7 +1,7 @@
 /// Top level module for preparing measurements for the linear programming implementation.
 /// This is everything up-to the actual program estimation
 
-use crate::parse::{NoiseField, SwathElem, BurstEntry, TimeRowLut, RawPattern};
+use crate::parse::{BurstEntry, TimeRowLut, RawPattern, HyperParams};
 use crate::read_from_archive::SentinelFormatId;
 use lapack::*;
 use std::sync::{Arc, Mutex};
@@ -13,7 +13,7 @@ use rustfft::num_complex::Complex64;
 use ndarray::{ArrayView2, Array2};
 use std::thread;
 
-type ArrToArr = Arc<Box<Fn(&[usize]) -> Vec<f64> + Sync + Send>> ;
+pub type ArrToArr = Arc<Fn(&[usize]) -> Vec<f64> + Sync + Send> ;
 
 pub struct TwoDArray{
     pub rows:usize,
@@ -197,7 +197,7 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     fn apply_quad(s:f64, coef:(f64, f64, f64)) -> f64 {
 	coef.0 + s*coef.1 + s*s*coef.2
     }
-    Arc::new(Box::new(move |cols:&[usize]| -> Vec<f64> {
+    Arc::new(move |cols:&[usize]| -> Vec<f64> {
 	cols.iter().map(|s_| {
 	    let s = (*s_) as f64;
 	    if s < x_c[0] {apply_quad(s, coef_list[0])}
@@ -210,7 +210,7 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
 	    }
 
 	}).collect()
-    }))
+    })
     
     
 }
@@ -279,10 +279,7 @@ pub fn get_interpolation_pattern (buffer:&str,
     
 }
 
-pub struct HyperParams {
-    pub box_l:usize,
-    pub add_pad:usize,//? where to pad the adjacent slices
-}
+
 
 fn compute_mean_slice(x:Arc<TwoDArray>, swath_bounds:BurstEntry)  -> Vec<f64> {
     let mut res = vec![0.0; swath_bounds.lr+1 - swath_bounds.fr];
@@ -422,7 +419,8 @@ fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, 
     
 }
 
-/// Processes the segments in the splits/ bursts and 
+/// Processes the segments in the splits/ bursts and
+/// returns the slope/intercept parameters for each slope.
 pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>,
 				    burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 				    split_indices:&MidPoint,
@@ -438,19 +436,9 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 		let mut lreal:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
 		let mut lant:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
 
-		/*let thread_closures:Vec<Box<Fn() -> ()  >> = (0..burst_coords[swath].len()).map(
-		    |e| {
-			Box::new(move | | {
-			    let (mut real, mut ant) = process_segment(x.clone(), &burst_coords[swath][e], swath, &mp_dict[swath][e], &splitind[swath][e], o_list[swath][e], hyper);
-			    for i in (0..n_splits).rev() {
-				lreal.lock().unwrap()[i].extend(real.pop().unwrap());
-				lant.lock().unwrap()[i].extend(ant.pop().unwrap());
-			    }
-			})
-	    }).collect();*/
-
+		/* Prepare threads for gathering segments. */
 		let mut thread_handles:Vec<_> = (0..burst_coords[swath].len()).map(
-		    |e| { // Clone reference counters.
+		    |e| { /* Clone reference counters.*/
 			let x_ = x.clone();
 			let hyper_ = hyper.clone();
 			let burst = burst_coords[swath][e].clone();
@@ -468,26 +456,15 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 			})
 		    }).collect();
 
+		/* Run the threads */
 		let b = thread_handles.len();
 		for i in 0..b {thread_handles.pop().unwrap().join();}
 
-		//let handles = (0..burst_coords[swath].len())
-		 //   .map(|x| {thread::spawn(thread_closures[x])});
-		
-		    
-		    
-		/*
-		for (e,burst) in burst_coords[swath].iter().enumerate() {
-		    let (mut real, mut ant) = process_segment(x.clone(), burst, swath, &mp_dict[swath][e], &splitind[swath][e], o_list[swath][e], hyper);
-
-		    for i in (0..n_splits).rev() {
-			lreal[i].extend(real.pop().unwrap());
-			lant[i].extend(ant.pop().unwrap());
-		    }
-		}*/
-
-		//ret.push(
-		//   lreal.iter().zip(lant.iter()).map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
+		/* Calculate the parameters via linear programming. */
+		ret.push(
+		    lreal.lock().unwrap().iter()
+			.zip(lant.lock().unwrap().iter())
+			.map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
 		
 	    }
 	}
@@ -495,7 +472,7 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
     }
     return ret;
 }
-
-
-
 //https://cvxopt.org/userguide/coneprog.html#cvxopt.solvers.lp
+
+
+
