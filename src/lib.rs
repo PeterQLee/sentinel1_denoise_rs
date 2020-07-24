@@ -1,3 +1,4 @@
+#![feature(get_mut_unchecked)]
 #[macro_use(s)]
 extern crate ndarray;
 //extern crate ndarray_linalg;
@@ -6,6 +7,7 @@ extern crate blas;
 extern crate openblas_src;
 extern crate libc;
 pub mod parse;
+
 pub mod apply;
 pub mod read_from_archive;
 pub mod interface;

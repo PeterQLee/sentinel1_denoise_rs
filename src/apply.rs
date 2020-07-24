@@ -1,3 +1,4 @@
+
 use crate::parse::{SwathElem,BurstEntry, HyperParams};
 use crate::read_from_archive::SentinelFormatId;
 use crate::prep_lp::{ArrToArr, TwoDArray, MidPoint, };
@@ -131,9 +132,9 @@ impl LpApply {
 	    let nex = lr.min(m.1.round() as usize);
 
 	    /* compute p_ant in this undisputed region */
-	    println!("pantsize = {}, max={}",p_ant.len(), nex-fr);
-	    println!("antsize = {}, max={}",ant.len(), nex-fr);
-	    println!("plen = {} {}",lin_params.len(),i);
+	    //println!("pantsize = {}, max={}",p_ant.len(), nex-fr);
+	    //println!("antsize = {}, max={}",ant.len(), nex-fr);
+	    //println!("plen = {} {}",lin_params.len(),i);
 	    p_ant[prev-fr..nex-fr].iter_mut()
 		.zip(ant[prev-fr..nex-fr].iter())
 		.for_each(|x| *x.0 = lin_params[i].b.exp() * x.1.powf(lin_params[i].m));
@@ -180,7 +181,7 @@ impl LpApply {
     ) {
 	for i in fa..la {
 	    for j in fr..lr {
-		x[(i,j)] = x[(i,j)] - p_ant[i] * azimuth_noise[(i,j)];
+		x[(i,j)] = x[(i,j)] - p_ant[j-fr] * azimuth_noise[(i,j)];
 	    }
 	}
     }
@@ -190,7 +191,8 @@ impl LpApply {
 
     /// Applies the power function noise floor
     /// without affine offsets.
-    pub fn apply_lp_noisefield(x:Arc<TwoDArray>,
+    pub fn apply_lp_noisefield(mut x:Arc<TwoDArray>,
+			       azimuth_noise:&TwoDArray,
 			       mp_dict:Vec<Vec<ArrToArr>>,
 			       burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 			       split_indices:&MidPoint,
@@ -200,6 +202,7 @@ impl LpApply {
 			       id:&SentinelFormatId) -> ()
     {
 	let num_subswaths:usize = get_num_subswath!(id);
+	
 	match split_indices {
 	    MidPoint::Est(_) => {
 		panic!("Wrong Midpoint. Test segments needed");
@@ -207,6 +210,8 @@ impl LpApply {
 	    MidPoint::Test(splitinds) => {
 		// Note that I'm reversing order from the python implementation because it will make
 		// it easier to parallelize.
+		let x_v = &mut x.clone();
+		let x_m = &mut x.clone();
 		for swath in 0..num_subswaths {
 		    let num_burst = burst_coords[swath].len();
 		    for cur_burst in 0..num_burst {
@@ -215,15 +220,23 @@ impl LpApply {
 		    
 			// TODO: ensure that burst_coords are sorted by fa.
 
-			let apply_subtract = |fa, la, fr, lr| {
+			let mut apply_subtract = |fa, la, fr, lr| -> Vec<f64>{
 			    let p_ant = LpApply::get_gapless_ant(fr, lr, mp_dict[swath][cur_burst].clone(),
 							&splitinds[swath][cur_burst],
-							&lin_params[swath]);
+								 &lin_params[swath]);
+			    LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_v)},
+						 &p_ant,
+						 &azimuth_noise,
+						 fa, la, fr, lr);
+						 
+			    //apply
+			    p_ant
+			    
 			};
 
 			// First burst and swath.
 			if cur_burst == 0 && swath_bounds[swath][0].fa < b_fa {
-			    let (fa, la, fr, lr) = unpack_bound!(swath_bounds[swath][cur_burst]);
+			    let (fa, _la, fr, lr) = unpack_bound!(swath_bounds[swath][0]);
 			    apply_subtract(fa, b_fa, fr, lr);
 			    // Apply azimuth noise to the p_ant.
 			}
@@ -243,16 +256,26 @@ impl LpApply {
 			    let s_fa = b_fa.max(fa);
 			    let s_la = b_la.min(la);
 
-			    apply_subtract(s_fa, s_la, fr, lr);
+			    let p_ant = apply_subtract(s_fa, s_la, fr, lr);
 
 			    // Check missing row
-			    if e == num_burst-1 && la > s_la {
+			    if cur_burst == num_burst-1 && la > s_la {
 				/* appply */
+				LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
+						 &p_ant,
+						 &azimuth_noise,
+						 fa, la, fr, lr);
 			    }
-			    else if e < num_burst-1 { // Apply between burst coordinates
-				let (n_fa, n_la, mn_fr, n_lr) = unpack_bound!(burst_coords[swath][cur_burst+1]);
+			    else if cur_burst < num_burst-1 { // Apply between burst coordinates
+				let (n_fa, _n_la, _n_fr, _n_lr) = unpack_bound!(burst_coords[swath][cur_burst+1]);
 				if n_fa > b_la && n_fa <= la {
 				    /* apply */
+				    LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
+								  &p_ant,
+								  &azimuth_noise,
+								  b_la, n_fa, fr, lr);
+				    
+				    
 				}
 			    }
 			}

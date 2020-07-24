@@ -203,11 +203,12 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     fn apply_quad(s:f64, coef:(f64, f64, f64)) -> f64 {
 	coef.0 + s*coef.1 + s*s*coef.2
     }
+    let len_x = x_c.len();
     Arc::new(move |cols:&[usize]| -> Vec<f64> {
 	cols.iter().map(|s_| {
 	    let s = (*s_) as f64;
-	    if s < x_c[0] {apply_quad(s, coef_list[0])}
-	    else if s > *x_c.last().unwrap() {apply_quad(s, *coef_list.last().unwrap())}
+	    if s <= x_c[0] {apply_quad(s, coef_list[0])}
+	    else if s >= x_c[len_x-3] {apply_quad(s, *coef_list.last().unwrap())}
 	    else {
 		match x_c.binary_search_by(|sd| sd.partial_cmp(&s).expect("Nan encountered") ) {
 		    Ok(t) => apply_quad(s,coef_list[t]),

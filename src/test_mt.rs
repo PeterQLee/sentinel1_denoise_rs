@@ -19,12 +19,14 @@ fn main() {
     let zipval = get_data_from_zip_path(path, true);
     let archout = zipval.unwrap();
     let mut x:Option<Array2<f64>> = None;
+    let mut y:Option<Array2<f64>> = None;
     match archout {
 	SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
             let mut x_:Option<Array2<f64>> = None;
             {
-		let mut y = noisefield.data.view_mut();
-		x_ = Some(prep_measurement(x16.view(), y));
+		let mut y_ = noisefield.data.view_mut();
+		x_ = Some(prep_measurement(x16.view(), y_));
+		y = Some(noisefield.data);
             }
             x = x_;
 	},
@@ -52,8 +54,22 @@ fn main() {
                 Some(id) => {
 		    let xk = x.unwrap();
 		    let crosspol_anno = id.create_crosspol_annotation();
+		    let crosspol_noise = id.create_crosspol_noise();
+		    let mut noisefield:Option<NoiseField> = None;
+		    for i in 0..ziparch.len() {
+                        let mut file = ziparch.by_index(i).unwrap();
+			if file.name() == crosspol_noise {
+                            let mut buffer = String::new();
+                            let xmldata = file.read_to_string(&mut buffer).unwrap();
+                            noisefield = Some(NoiseField::compute_azimuth_field(&buffer, (xk.shape()[0], xk.shape()[1])));
+			}
+		    }
+		    
 		    let rewrap = Instant::now();
 		    let xv = Arc::new(TwoDArray::from_ndarray(xk));
+		    //let yv = TwoDArray::from_ndarray(y.unwrap());
+		    let yv = TwoDArray::from_ndarray(noisefield.unwrap().data);
+
 		    println!("rewraptime = {}", rewrap.elapsed().as_secs_f64());
 		    for i in 0..ziparch.len() {
                         let mut file = ziparch.by_index(i).unwrap();
@@ -119,7 +135,9 @@ fn main() {
 											 true
 			    );
 
+			    let applytime = Instant::now();
 			    LpApply::apply_lp_noisefield(xv.clone(),
+							 &yv,
 							 r_mp_dict,
 							 &bt,
 							 &r_split_indices,
@@ -127,7 +145,7 @@ fn main() {
 							 &params,
 							 hyper.clone(),
 							 &id);
-						
+			    println!("apply = {}", applytime.elapsed().as_secs_f64());
 
                         }
 		    }

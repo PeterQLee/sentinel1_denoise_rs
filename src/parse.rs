@@ -2,7 +2,7 @@
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
-use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayView1, ArrayView2, Slice};
+use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayView1, ArrayView2, ArrayViewMut2, Slice};
 use ndarray::Zip;
 use ndarray::prelude::*;
 //use ndarray::parallel::prelude::*;
@@ -145,21 +145,59 @@ impl NoiseField {
         return NoiseField {
             data:NoiseField::compute_field(range_result, azimuth_result, shape)
         };
-
-        
-        //     }
-       // }
-        
-      //  else {
-       //     let rgst:[Box<&[u8]>;2] = [Box::new(b"noise"),
-        //                               Box::new(b"noiseVectorList"),
-       //     ];
-       //     let range_result = seek_to_list(&rgst, &mut reader, range_parse_func);
-       //     return NoiseField {
-       //         data:NoiseField::compute_field(range_result, )
-       //     };
-            
     }
+    /// Computes only the azimuth magnitude in the noise field
+    pub fn compute_azimuth_field(filebuffer:&str, shape:(usize, usize)) -> NoiseField {
+        let mut reader = Reader::from_str(filebuffer);
+
+        //if two_eight_flag {
+        
+        let azst:[Box<&[u8]>;2] = [Box::new(b"noise"),
+                                   Box::new(b"noiseAzimuthVectorList"),
+        ];
+        
+ 
+        let azimuth_result = seek_to_list(&azst, &mut reader, NoiseField::azimuth_parse_func);
+	
+        let mut azarr = NoiseField::interpolate_col(azimuth_result, shape);
+
+	// Normalize azarr
+	NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
+	
+        return NoiseField {
+            data:azarr
+        };
+    }
+
+    fn remove_azimuth_bias(mut arr:ArrayViewMut2<f64>, shape:(usize, usize)) {
+	for j in 0..shape.1 {
+	    let mut refsum = 0.0;
+	    let mut colsum = 0.0;
+	    for i in 0..shape.0 {
+		if arr[(i,j)] > 0.0{
+		    colsum += arr[(i,j)];
+		    refsum += 1.0;
+		}
+	    }
+	    let normfactor = refsum/colsum;
+	    for i in 0..shape.0 {
+		arr[(i,j)] = arr[(i,j)]*normfactor;
+	    }
+	}
+	
+    }
+    /*def remove_azimuth_bias(aznoise, mmask):
+
+    azmask = aznoise != 0
+
+    colsum = np.sum(aznoise, axis=0)
+    refsum = np.sum(azmask, axis=0) # N for each column. Ignore zeroed entries.
+
+    normfactor = refsum/colsum # Rescale so that we have removed the total bias of the azimuth noise.
+
+    unbias_aznoise = aznoise * normfactor[np.newaxis,:]
+    return unbias_aznoise*/
+    
 
 
 

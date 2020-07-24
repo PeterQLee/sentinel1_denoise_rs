@@ -58,7 +58,7 @@ impl SentinelFormatId {
         return format!("S1{up_sentid}_{sentmode}_GRD{quality}_1SD{upemit}_{upper_dateid}.SAFE/annotation/s1{sentid}-{lower_sentmode}-grd-{polid}-{lower_dateid}-002.xml", up_sentid = up_sentid, sentmode = self.sentmode, lower_sentmode = self.lower_sentmode, quality = self.quality, upemit = upemit, upper_dateid = self.upper_dateid, sentid = self.sentid, polid = polid, lower_dateid = self.lower_dateid);
     }
 
-    fn create_crosspol_noise(&self) -> String {
+    pub fn create_crosspol_noise(&self) -> String {
         let polid;
         let upemit;
         
