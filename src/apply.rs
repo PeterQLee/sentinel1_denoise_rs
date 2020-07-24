@@ -7,7 +7,8 @@ use ndarray::prelude::*;
 use ndarray::{ArrayViewMut2, ArrayView1, ArrayView2, Slice};
 use ndarray::Zip;
 //use ndarray_parallel::prelude::*;
-
+use lapack::*;
+use blas::*;
 
 use std::sync::Arc;
 use std::thread;
@@ -22,6 +23,61 @@ macro_rules! get_num_subswath {
 	}
     }
 }
+
+macro_rules! unpack_bound {
+    ($sw:expr) => {
+	($sw.fa, $sw.la, $sw.fr, $sw.lr)
+    }
+}
+
+/// Get number of looks for specified image type
+/// These values were taken from https://sentinel.esa.int/web/sentinel/user-guides/sentinel-1-sar/resolutions/level-1-ground-range-detected
+macro_rules! get_look {
+    ($sw:expr) => {
+	match $sw.sentmode.as_str() {
+	    "EW" => {
+		match $sw.quality.as_str() {
+		    "H" => {2.7},
+		    "M" => {10.7},
+		    e => {panic!("Unrecognized image quality {}",e)}
+		}
+	    }
+	    "IW" => {
+		match $sw.quality.as_str() {
+		    "H" => {4.4},
+		    "M" => {81.8},
+		    e => {panic!("Unrecognized image quality {}",e)}
+		}
+	    }
+	    e => {panic!("Unrecognized imaging type {}",e)}
+	}
+    }
+}
+
+/// Reduce mean along both axes
+fn reduce_mean(x:&TwoDArray,
+		fa:usize, la:usize, fr:usize, lr:usize) -> f64
+{
+    let mut total = 0.0;
+    for i in fa..la {
+	for j in fr..lr {
+	    total += x[(i,j)]/(((la-fa)*(lr-fr)) as f64);
+	}
+    }
+    return total;
+}
+
+fn reduce_col_mean(x:&TwoDArray,
+		fa:usize, la:usize, fr:usize, lr:usize) -> Vec<f64>  {
+    let mut total = vec![0.0;(la-fa)];
+    for i in fa..la {
+	for j in fr..lr {
+	    total[i] += x[(i,j)]/((lr-fr) as f64);
+	}
+    }
+    return total;
+}
+
 
 /// Applies subswath noise subtraction scaling
 ///
@@ -107,11 +163,6 @@ pub fn convert_to_f64_f32(x:ArrayView2<f64>) -> Array2<f32>{
 pub struct LpApply{
 }
 
-macro_rules! unpack_bound {
-    ($sw:expr) => {
-	($sw.fa, $sw.la, $sw.fr, $sw.lr)
-    }
-}
 
 impl LpApply {
     /// Gets gapless antenna pattern.
@@ -188,21 +239,103 @@ impl LpApply {
     }
 
 
-
-
+    /// Applies interior noise removal within threads.
+    fn apply_interior(x_v:&mut Arc<TwoDArray>,
+		      x_m:&mut Arc<TwoDArray>,
+		      burst:Arc<BurstEntry>,
+		      next_burst:Option<Arc<BurstEntry>>,
+		      mp:ArrToArr,
+		      sind:Arc<Vec<(f64,f64)>>,
+		      lin_par:Vec<crate::est_lp::lin_params>,
+		      aznoise:Arc<TwoDArray>,
+		      swath_bounds_:Arc<Vec<Vec<SwathElem>>>,
+		      cur_burst:usize,
+		      num_burst:usize,
+		      swath:usize,
+    )
+		      
+    {
+	let (b_fa, b_la, _b_fr, _b_lr) = unpack_bound!(burst);
+	// TODO: ensure that burst_coords are sorted by fa.
+	
+	let mut apply_subtract = |fa, la, fr, lr| -> Vec<f64>{
+	    let p_ant = LpApply::get_gapless_ant(fr, lr, mp.clone(),
+						 &sind,
+						 &lin_par);
+	    LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_v)}, //unsafe is bad, but I guaruntee no race conditions.
+					  &p_ant,
+					  &aznoise,
+					  fa, la, fr, lr);
+	    
+	    //apply
+	    p_ant
+		
+	};
+	
+	// First burst and swath.
+	if cur_burst == 0 && swath_bounds_[swath][0].fa < b_fa {
+	    let (fa, _la_, fr, lr_) = unpack_bound!(swath_bounds_[swath][0]);
+	    let lr = lr_ + 1;
+	    apply_subtract(fa, b_fa, fr, lr);
+	    // Apply azimuth noise to the p_ant.
+	}
+	
+	// Last subswath.
+	if cur_burst == num_burst-1 && swath_bounds_[swath].last().unwrap().fa > b_fa{
+	    let (fa, la, fr, lr_) = unpack_bound!(swath_bounds_[swath].last().unwrap());
+	    let lr = lr_ + 1;
+	    apply_subtract(fa, la, fr, lr);
+	}
+	
+	// Iterate over every swath entry and insert in segments where it is fit.
+	for e in 0..swath_bounds_[swath].len() {
+	    let (fa, la_, fr, lr_)  = unpack_bound!(swath_bounds_[swath][e]);
+	    let la = la_ + 1;
+	    let lr = lr_ + 1;
+	    
+	    if fa > b_la || b_fa > la {continue;}
+	    
+	    let s_fa = b_fa.max(fa);
+	    let s_la = b_la.min(la);
+				    
+	    let p_ant = apply_subtract(s_fa, s_la, fr, lr);
+	    
+	    // Check missing row
+	    if cur_burst == num_burst-1 && la > s_la {
+		/* appply */
+		LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
+					      &p_ant,
+					      &aznoise,
+					      fa, la, fr, lr);
+	    }
+	    else if cur_burst < num_burst-1 { // Apply between burst coordinates
+		let (n_fa, _n_la, _n_fr, _n_lr) = unpack_bound!(next_burst.clone().unwrap());
+		if n_fa > b_la && n_fa <= la {
+		    /* apply */
+		    LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
+						  &p_ant,
+						  &aznoise,
+						  b_la, n_fa, fr, lr);
+		    
+		}
+	    }
+	}
+    }
+    
     /// Applies the power function noise floor
     /// without affine offsets.
-    pub fn apply_lp_noisefield(mut x:Arc<TwoDArray>,
-			       azimuth_noise:&TwoDArray,
+    pub fn apply_lp_noisefield(x:Arc<TwoDArray>,
+			       azimuth_noise:Arc<TwoDArray>,
 			       mp_dict:Vec<Vec<ArrToArr>>,
 			       burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 			       split_indices:&MidPoint,
-			       swath_bounds:&[Vec<SwathElem>],
+			       swath_bounds:Arc<Vec<Vec<SwathElem>>>,
 			       lin_params:&Vec<Vec<crate::est_lp::lin_params>>,
 			       hyper:Arc<HyperParams>,
 			       id:&SentinelFormatId) -> ()
     {
 	let num_subswaths:usize = get_num_subswath!(id);
+
 	
 	match split_indices {
 	    MidPoint::Est(_) => {
@@ -211,184 +344,221 @@ impl LpApply {
 	    MidPoint::Test(splitinds) => {
 		// Note that I'm reversing order from the python implementation because it will make
 		// it easier to parallelize.
-		let x_v = &mut x.clone();
-		let x_m = &mut x.clone();
 		for swath in 0..num_subswaths {
 		    let num_burst = burst_coords[swath].len();
 
 		    // Paralelize this.
-		    for cur_burst in 0..num_burst {
-			let (b_fa, b_la, _b_fr, _b_lr) = unpack_bound!(burst_coords[swath][cur_burst]);
-
-		    
-			// TODO: ensure that burst_coords are sorted by fa.
-
-			let mut apply_subtract = |fa, la, fr, lr| -> Vec<f64>{
-			    let p_ant = LpApply::get_gapless_ant(fr, lr, mp_dict[swath][cur_burst].clone(),
-							&splitinds[swath][cur_burst],
-								 &lin_params[swath]);
-			    LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_v)},
-						 &p_ant,
-						 &azimuth_noise,
-						 fa, la, fr, lr);
-						 
-			    //apply
-			    p_ant
+		    let mut thread_handles:Vec<_> = (0..num_burst).map(
+			|cur_burst| {
+			    let mut x_v = x.clone();
+			    let mut x_m = x.clone();
+			    let burst = burst_coords[swath][cur_burst].clone();
 			    
-			};
-
-			// First burst and swath.
-			if cur_burst == 0 && swath_bounds[swath][0].fa < b_fa {
-			    let (fa, _la, fr, lr) = unpack_bound!(swath_bounds[swath][0]);
-			    apply_subtract(fa, b_fa, fr, lr);
-			    // Apply azimuth noise to the p_ant.
-			}
-
-			// Last subswath.
-			if cur_burst == num_burst-1 && swath_bounds[swath].last().unwrap().fa > b_fa{
-			    let (fa, la, fr, lr) = unpack_bound!(swath_bounds[swath].last().unwrap());
-			    apply_subtract(fa, la, fr, lr);
-			}
-
-			// Iterate over every swath entry and insert in segments where it is fit.
-			for e in 0..swath_bounds[swath].len() {
-			    let (fa, la, fr, lr)  = unpack_bound!(swath_bounds[swath][e]);
+			    let next_burst:Option<Arc<BurstEntry>> =
+				if cur_burst == num_burst-1 {None}
+			    else {Some(burst_coords[swath][cur_burst+1].clone())};
 			    
-			    if fa > b_la || b_fa > la {continue;}
+			    let mp = mp_dict[swath][cur_burst].clone();
+			    let sind = splitinds[swath][cur_burst].clone();
+			    let lin_par = lin_params[swath].clone();
+			    let aznoise = azimuth_noise.clone();
+			    let swath_bounds_ = swath_bounds.clone();
+			    thread::spawn(move || {
+				LpApply::apply_interior(
+				    &mut x_v,
+				    &mut x_m,
+				    burst,
+				    next_burst,
+				    mp,
+				    sind,
+				    lin_par,
+				    aznoise,
+				    swath_bounds_,
+				    cur_burst,
+				    num_burst,
+				    swath);
 			    
-			    let s_fa = b_fa.max(fa);
-			    let s_la = b_la.min(la);
-
-			    let p_ant = apply_subtract(s_fa, s_la, fr, lr);
-
-			    // Check missing row
-			    if cur_burst == num_burst-1 && la > s_la {
-				/* appply */
-				LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
-						 &p_ant,
-						 &azimuth_noise,
-						 fa, la, fr, lr);
-			    }
-			    else if cur_burst < num_burst-1 { // Apply between burst coordinates
-				let (n_fa, _n_la, _n_fr, _n_lr) = unpack_bound!(burst_coords[swath][cur_burst+1]);
-				if n_fa > b_la && n_fa <= la {
-				    /* apply */
-				    LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
-								  &p_ant,
-								  &azimuth_noise,
-								  b_la, n_fa, fr, lr);
-				    
-				    
-				}
-			    }
-			}
-		    }
+			    })}).collect();
+		    let b = thread_handles.len();
+		    for _i in 0..b {thread_handles.pop().unwrap().join().unwrap();}
 		}
 	    }
 	}
     }
-
-
-    /*
-def square_gapless_segmethod_denoise(x, y, mp_dict, slope_list, intercept_list, burst_coords, swath_bounds,  azimuth_noise, split_indices, sent_mode = 'EW', one_flag = False):
-    """
-    Interpolates radiation pattern to match the full extent of the swathbounds.
-    """
-    result = np.zeros(x.shape)
-    N = NUMSUBSWATHS[sent_mode]
     
-    if one_flag:
-        # on the fly replace the function if flag.
-        _get_gapless_ant = _get_one_ant
-    else:
-        _get_gapless_ant = _get_gapless_ant_
-
-    ###swath_mask = np.zeros(x.shape, dtype=np.int)
-    #check_mask = np.zeros(x.shape, dtype=np.int)
-    for e in range(N):
-        swath = SUBSWATH_NAMES[sent_mode][e]
-
-        bursts = burst_coords[swath]
-        al = [a for a, _, __, ___ in burst_coords[swath]]
-        burst_inds = np.argsort(al) # sort according to azimuth (row)
-        slope = slope_list[e]
-        intercept = intercept_list[e]
-        
-        cur_burst = burst_inds[0]
-        k = cur_burst
-        swath_count = 0
-        for fa, la, fr, lr in swath_bounds[e]:
-
-            
-            la += 1
-            lr += 1
-            #swath_mask[fa:la, fr:lr] += 1
-            
-            # cur_burst is the last used burst, it is prserved from 
-            if swath_count == 0 and fa < bursts[cur_burst][0]:
-                # swath bound is outside the ascribed burst
-                b_fa, _b_la, _fr, _lr = bursts[cur_burst]
-
-                p_ant = _get_gapless_ant(fr, lr, mp_dict, swath, cur_burst, split_indices, intercept, slope)
-                assert(np.all(p_ant!=0))
-                result[fa: b_fa, fr:lr] = x[fa: b_fa, fr:lr] - p_ant[np.newaxis,:] * azimuth_noise[fa: b_fa, fr:lr]
-                #print('outside')
-                #check_mask[fa: b_fa, fr:lr] += 1
-
-            # This implies that there are no bursts that fit the last subswath
-            if fa > bursts[burst_inds[-1]][0]:
-                #print(fa,la,fr,lr,k,'trigger')
-                cur_burst = burst_inds[-1]
-                b_fa, _b_la, _fr, _lr = bursts[cur_burst]
-
-                p_ant = _get_gapless_ant(fr, lr, mp_dict, swath, cur_burst, split_indices, intercept, slope)
-                result[fa: la, fr:lr] = x[fa: la, fr:lr] - p_ant[np.newaxis,:] * azimuth_noise[fa: la, fr:lr]
-                #check_mask[fa: la, fr:lr] += 1
-
-
-            # iterate over every burst entry to see if the burst fits in this subswath split
-            for q, cur_burst in enumerate(burst_inds):
-                k = cur_burst
-                # account for everything within the burst.
-                b_fa, b_la, _b_fr, _b_lr = bursts[cur_burst]
-                
-                #b_la += 1
-                if fa > b_la or b_fa > la: continue
-                b_fa = max(b_fa, fa)
-                b_la = min(b_la, la) # Asserts changes remain between subswath divisions
-
-                ant = mp_dict[swath][cur_burst](np.arange(fr, lr)) # compute pattern for the initial one.
-                # Get adjusted antenna denoising pattern
-                p_ant = _get_gapless_ant(fr, lr, mp_dict, swath, cur_burst, split_indices, intercept, slope)
-                
-                result[b_fa:b_la, fr:lr] = x[b_fa:b_la, fr:lr] - p_ant[np.newaxis,:] * azimuth_noise[b_fa:b_la, fr:lr]
-                #check_mask[b_fa:b_la, fr:lr] += 1
-                assert(np.all(p_ant!=0))
-
-                #print('q={} fa={} la={} b_fa={} b_la={} subswath = {}'.format(q, fa, la, b_fa, b_la, swath))
-
-
-                # Fill in any missing rows
-                if la > b_la and q == len(burst_inds)-1: # Last row, apply to the rest
-                    result[b_la:la, fr:lr] = x[b_la:la, fr:lr] - p_ant[np.newaxis,:] * azimuth_noise[b_la:la, fr:lr]
-                    #print('remain')
-                    #check_mask[b_la:la, fr:lr] += 1
-
-                    
-                elif q < len(bursts)-1: # apply between burst coordinates.
-                    n_fa, n_la, n_fr, n_lr = bursts[burst_inds[q+1]]
-
-                    if n_fa > b_la and n_fa <= la: #there is a gap
-                        #print('between q={} n_fa={} b_la={} lr={}'.format(q, n_fa, b_la, lr))
-                        result[b_la:n_fa, fr:lr] = x[b_la:n_fa, fr:lr] - p_ant[np.newaxis,:] * azimuth_noise[b_la:n_fa, fr:lr]
-                        #check_mask[b_la:n_fa, fr:lr] += 1
-            swath_count+=1
-    #assert(np.all(check_mask == swath_mask))
-    return result
-     */
+/*def square_gapless_segmethod_denoise(x, y, mp_dict, slope_list, intercept_list, burst_coords, swath_bounds,  azimuth_noise, split_indices, sent_mode = 'EW', one_flag = False):*/
+ 
     
-    pub fn compute_affine() {
+    pub fn apply_affine(x:Arc<TwoDArray>,
+			  original:TwoDArray,
+			  swath_bounds:Arc<Vec<Vec<SwathElem>>>,
+			  hyper:Arc<HyperParams>,
+			id:&SentinelFormatId) {
+	let num_subswaths:usize = get_num_subswath!(id);
+	let o = LpApply::compute_affine(x.clone(),
+			       original,
+			       swath_bounds.clone(),
+			       hyper.clone(),
+					&id);
+	assert!(o.len() == num_subswaths);
+
+	let mut handles = Vec::new();
+	for swath in 0..num_subswaths {
+	    for m in 0..swath_bounds[swath].len() {
+		let st = swath_bounds.clone();
+		let mut xv = x.clone();
+		let oval = o[swath];
+
+		handles.push(thread::spawn(move|| {
+		    LpApply::sub_offset(unsafe{Arc::get_mut_unchecked(&mut xv)},
+			       st,
+			       swath,
+			       m,
+			       oval);
+			       
+		}));
+	    }
+	}
+	let b = handles.len();
+	for _i in 0..b {handles.pop().unwrap().join().unwrap();}
     }
+    /// Adds the computed offset
+    fn sub_offset(xv:&mut TwoDArray,
+		  swath_bounds:Arc<Vec<Vec<SwathElem>>>,
+		  swath:usize,
+		  m:usize,
+		  oval:f64) {
+
+	let (fa, la_, fr, lr_) = unpack_bound!(swath_bounds[swath][m]);
+	let la = la_ + 1;
+	let lr = lr_ + 1;
+	for i in fa..la {
+	    for j in fr..lr {
+		xv[(i,j)] = xv[(i,j)] - oval;
+	    }
+	}
+	
+    }
+    
+    /// Least squares compute offset.
+    #[allow(non_snake_case)]
+    fn compute_affine(x:Arc<TwoDArray>,
+			  original:TwoDArray,
+			  swath_bounds:Arc<Vec<Vec<SwathElem>>>,
+			  hyper:Arc<HyperParams>,
+			  id:&SentinelFormatId) -> Vec<f64>{
+			  
+	
+	let num_subswaths:usize = get_num_subswath!(id);
+	let base_l:f64 = get_look!(id); // looks in the sentinel image type
+	// TODO: need to adjust 
+	let lowpad = hyper.affine_lowpad;
+	let highpad = hyper.affine_highpad;
+
+	let var_norm = hyper.affine_var_norm; // Normalization for
+	let LIM = if id.sentmode.as_str() == "EW" {2000000.0}
+	else {5000000.0};
+
+	let look:f64 = ((lowpad - highpad) as f64)*base_l;
+
+	let num_entries:usize = (0..num_subswaths-1).fold(0,|acc1, z1| {
+	    acc1 + swath_bounds[z1].len()});
+	
+	let mut m:Vec<f64> = vec![0.0;num_entries+1]; // num swath bounds plus 1 for regularization
+	let mut C:Vec<f64> = vec![0.0;(num_entries+1)*num_subswaths]; //(num_entries+1) by num_subswaths matrix
+
+	let mut count:usize = 0;
+	for swath in 0..num_subswaths-1 {
+	    for st in swath_bounds[swath].iter() {
+		let (fa, la, _fr, lr) = unpack_bound!(st);
+		
+		let left_a = reduce_col_mean(&x, fa, la+1, lr-lowpad, lr-highpad);
+		let right_a = reduce_col_mean(&x, fa, la+1, lr+1+highpad, lr+1+lowpad);
+		
+		let ref_left = reduce_col_mean(&original, fa, la+1, lr-lowpad,lr-highpad);
+		let ref_right = reduce_col_mean(&original, fa, la+1, lr+1+highpad, lr+1+lowpad);
+		
+		let var_left:Vec<_> = ref_left.iter().map(|z| z*z/look).collect();
+		let var_right:Vec<_> = ref_right.iter().map(|z| z*z/look).collect();
+		
+		let combined_var = var_left.iter().zip(var_right.iter()).map(|z| z.0+z.1);
+		let valid = var_left.iter().zip(var_right.iter()).map(|z| *z.0!=0.0 && *z.1!=0.0);
+		
+		let w_:(f64, usize) = combined_var.zip(valid).fold((0.0,0), |acc,z| {
+		    if z.1 {return (acc.0+z.0, acc.1+1);}
+		    acc});
+		let w = var_norm/(w_.0/(w_.1 as f64));
+		
+		let num_mas:(f64,usize) = left_a.iter().zip(right_a.iter()).fold((0.0,0),|acc,z| {
+		    if (z.0-z.1).abs() < LIM {return (acc.0+z.0-z.1,acc.1+1)}
+		    acc});
+		
+		m[count] = w * num_mas.0/(num_mas.1 as f64);
+
+		C[swath*(num_entries+1) + count] = w;
+		C[(swath+1)*(num_entries+1) + count] = -w;
+		count += 1;
+	    }
+	}
+
+
+	// Add regularization
+	for swath in 0..num_subswaths {C[swath*(num_entries+1) + num_entries] = 1.0;}
+	m[num_entries] = 0.0;
+
+	//Solve least squares problem..
+
+	let mut A = vec![0.0;num_subswaths*num_subswaths];
+	// Compute C^T@C
+	unsafe {
+	    dgemm(b'T', b'N', 
+		  num_subswaths as i32,
+		  num_subswaths as i32,
+		  (num_entries+1) as i32,
+		  1.0,
+		  &C,
+		  (num_entries+1) as i32,
+		  &C,
+		  (num_entries+1) as i32,
+		  1.0,
+		  &mut A,
+		  num_subswaths as i32);
+	}
+	// Compute C^T@b
+	let mut b = vec![0.0;num_subswaths];
+	unsafe {
+	    dgemv(b'T',
+		  (num_entries+1) as i32,
+		  num_subswaths as i32,
+		  1.0,
+		  &C,
+		  (num_entries+1) as i32,
+		  &m,
+		  1_i32,
+		  0.0,
+		  &mut b,
+		  1_i32);
+	}
+
+	let mut INFO:i32 = 0;
+	let mut IPIV:Vec<i32> = vec![0;num_subswaths];
+
+	unsafe {
+            dgesv(num_subswaths as i32, //num eqs
+		  1 as i32, //num eqs
+		  &mut A,
+		  num_subswaths as i32, //leading dim of A
+		  &mut IPIV, //pivot matrix
+		  &mut b, /////// right hand side
+		  num_subswaths as i32, //LDB
+		  &mut INFO);
+	}
+	assert!(INFO==0);
+	return b;
+    }
+    /*
+def compute_variance_weighted_subswath_offsets(x, reference, swath_bounds, sent_mode = 'EW'):
+*/
 }
 
 

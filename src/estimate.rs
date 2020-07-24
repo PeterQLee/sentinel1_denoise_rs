@@ -72,6 +72,7 @@ const NORM:f64 = 10000.0;
 /// - `y` ESA calibrated noise for hv image
 /// - `w` half-period in terms of row spacing
 /// - `swath_bounds` boundaries of subswaths in col indices
+#[allow(non_snake_case)]
 pub fn estimate_k_values(x:ArrayView2<f64>,
                      y:ArrayView2<f64>,
                      w:&[usize],

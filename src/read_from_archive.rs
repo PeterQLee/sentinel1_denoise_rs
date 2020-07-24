@@ -16,7 +16,7 @@ pub struct SentinelFormatId {
     sentid:String,
     pub sentmode:String,
     lower_sentmode:String,
-    quality:String,
+    pub quality:String,
     polarization:String,
     lower_dateid:String
 }

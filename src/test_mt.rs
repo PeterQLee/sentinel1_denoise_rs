@@ -53,6 +53,8 @@ fn main() {
 	    match sentid {
                 Some(id) => {
 		    let xk = x.unwrap();
+		    let original = xk.clone();
+		    
 		    let crosspol_anno = id.create_crosspol_annotation();
 		    let crosspol_noise = id.create_crosspol_noise();
 		    let mut noisefield:Option<NoiseField> = None;
@@ -68,7 +70,7 @@ fn main() {
 		    let rewrap = Instant::now();
 		    let xv = Arc::new(TwoDArray::from_ndarray(xk));
 		    //let yv = TwoDArray::from_ndarray(y.unwrap());
-		    let yv = TwoDArray::from_ndarray(noisefield.unwrap().data);
+		    let yv = Arc::new(TwoDArray::from_ndarray(noisefield.unwrap().data));
 
 		    println!("rewraptime = {}", rewrap.elapsed().as_secs_f64());
 		    for i in 0..ziparch.len() {
@@ -103,10 +105,7 @@ fn main() {
 				}
 			    }
 			    
-			    let hyper:Arc<HyperParams> = Arc::new(HyperParams{
-				box_l:51,
-				add_pad:0
-			    });
+			    let hyper:Arc<HyperParams> = Arc::new(HyperParams::default());
 
 			    let now = Instant::now();
 			    println!("STarting estimation");
@@ -136,16 +135,27 @@ fn main() {
 			    );
 
 			    let applytime = Instant::now();
+			    let sb = Arc::new(swath_bounds);
+			    let sb1 = sb.clone();
 			    LpApply::apply_lp_noisefield(xv.clone(),
-							 &yv,
+							 yv.clone(),
 							 r_mp_dict,
 							 &bt,
 							 &r_split_indices,
-							 &swath_bounds,
+							 sb,
 							 &params,
 							 hyper.clone(),
 							 &id);
 			    println!("apply = {}", applytime.elapsed().as_secs_f64());
+
+			    LpApply::apply_affine(xv.clone(),
+						  TwoDArray::from_ndarray(original.clone()),
+						  sb1,
+						  hyper.clone(),
+						  &id);
+						  
+
+			    
 
                         }
 		    }

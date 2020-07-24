@@ -1421,4 +1421,20 @@ impl RawPattern {
 pub struct HyperParams {
     pub box_l:usize,
     pub add_pad:usize,//? where to pad the adjacent slices
+    pub affine_lowpad:usize, // padding for affine subswath computation
+    pub affine_highpad:usize,
+    pub affine_var_norm:f64
+}
+
+
+impl HyperParams {
+    pub fn default() -> HyperParams{
+	HyperParams{
+	    box_l:51,
+	    add_pad:0,
+	    affine_lowpad:10,
+	    affine_highpad:30,
+	    affine_var_norm:10000000.0 //variable for normalizing variance calculation for offsets
+	}
+    }
 }
