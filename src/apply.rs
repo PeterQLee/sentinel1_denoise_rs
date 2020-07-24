@@ -7,9 +7,10 @@ use ndarray::prelude::*;
 use ndarray::{ArrayViewMut2, ArrayView1, ArrayView2, Slice};
 use ndarray::Zip;
 //use ndarray_parallel::prelude::*;
-use rayon::prelude::*;
+
 
 use std::sync::Arc;
+use std::thread;
 const NUM_SUBSWATHS:usize = 5;
 
 macro_rules! get_num_subswath {
@@ -214,6 +215,8 @@ impl LpApply {
 		let x_m = &mut x.clone();
 		for swath in 0..num_subswaths {
 		    let num_burst = burst_coords[swath].len();
+
+		    // Paralelize this.
 		    for cur_burst in 0..num_burst {
 			let (b_fa, b_la, _b_fr, _b_lr) = unpack_bound!(burst_coords[swath][cur_burst]);
 
