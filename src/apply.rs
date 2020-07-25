@@ -103,7 +103,7 @@ pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
                 .and(y.slice(s![swth.fa..swth.la+1, swth.fr..swth.lr+1]))
             //.par_apply(|x_, y_| {
 		.apply(|x_, y_| {
-                    *x_ = *x_ - ks*y_;
+                    *x_ = (*x_).max(0.0) - ks*y_.max(0.0);
                 });
         }
     }

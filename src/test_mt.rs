@@ -12,7 +12,9 @@ use std::sync::Arc;
 use ndarray::{Array1, Array2, arr1};
 use std::time::{Duration, Instant};
 fn main() {
-    let path = "/mnt/D2/Data/Sentinel/beaufortredown/S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.zip";
+    //let path = "/mnt/D2/Data/Sentinel/ant2_test//S1B_EW_GRDM_1SDH_20200112T183748_20200112T183848_019787_02569C_3399.zip";
+    let path = "/mnt/D2/Data/Sentinel/ant2_test//S1A_EW_GRDM_1SDH_20191224T193600_20191224T193700_030494_037DD6_1F74.zip";
+	//let path = "/mnt/D2/Data/Sentinel/beaufortredown/S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.zip";
     
     let file_h = File::open(path);
 
@@ -20,15 +22,28 @@ fn main() {
     let archout = zipval.unwrap();
     let mut x:Option<Array2<f64>> = None;
     let mut y:Option<Array2<f64>> = None;
+    let mut base:Option<Array2<f64>> = None;
     match archout {
 	SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
             let mut x_:Option<Array2<f64>> = None;
-            {
-		let mut y_ = noisefield.data.view_mut();
-		x_ = Some(prep_measurement(x16.view(), y_));
-		y = Some(noisefield.data);
-            }
+
+            
+	    let mut y_ = noisefield.data.view_mut();
+	    let mut mv = prep_measurement(x16.view(), y_);
+	    x_ = Some(mv.clone());
+
+	    y = Some(noisefield.data);
+            
             x = x_;
+	    println!("stmv={}", mv[(0,100)]);
+	    println!("stmv={}", mv[(100,0)]);
+	    println!("mv={}", mv[(500,500)]);
+
+	    let sb:Vec<&[SwathElem]> = swath_bounds.iter().map(|a| a.as_slice()).collect();
+	    let k = arr1(&[1.0,1.0,1.0,1.0,1.0]);
+	    apply_swath_scale(mv.view_mut(), y.unwrap().view(), k.view(), &sb);
+	    base = Some(mv);
+	    
 	},
 	_ => {}
     }
@@ -71,6 +86,7 @@ fn main() {
 		    let xv = Arc::new(TwoDArray::from_ndarray(xk));
 		    //let yv = TwoDArray::from_ndarray(y.unwrap());
 		    let yv = Arc::new(TwoDArray::from_ndarray(noisefield.unwrap().data));
+		    let base_v = Arc::new(TwoDArray::from_ndarray(base.unwrap()));
 
 		    println!("rewraptime = {}", rewrap.elapsed().as_secs_f64());
 		    for i in 0..ziparch.len() {
@@ -88,7 +104,37 @@ fn main() {
 								     &lut,
 								     &swath_bounds,
 								     &id);
+			    let hyper:Arc<HyperParams> = Arc::new(HyperParams::default());
+
+			    let min_time = Instant::now();
+			    /*
+			    println!("first_burst = {} {} {} {}",
+				     bt[0][0].fa,
+				     bt[0][0].la,
+				     bt[0][0].fr,
+				     bt[0][0].lr);
+			   
+			    println!("lut {} {} {} {}", lut.lut[0][0].row, lut.lut[0][0].col, lut.lut[0][0].elevangle, lut.lut[0][0].aztime);
+			    println!("lut {} {} {} {}", lut.lut[0][1].row, lut.lut[0][1].col, lut.lut[0][1].elevangle, lut.lut[0][1].aztime);*/
+
+			    /*
+			    println!("start={}", base_v[(0,0)]);
+			    println!("start={}", base_v[(0,100)]);
+			    println!("start={}", base_v[(100,0)]);
+			    println!("{}", base_v[(500,500)]);*/
+			    let mut mino_list:Vec<Vec<f64>> = compute_mino_list(
+				base_v.clone(),
+				//xv.clone(),
+				&bt,
+				hyper.clone(),
+				&id);
 			    
+			    
+			    println!("mino_time = {}", min_time.elapsed().as_secs_f64());
+			    println!("mino_values={:?}", mino_list);
+			    
+			    panic!("");
+
 			    let (mp_dict, split_indices) = get_interpolation_pattern(&buffer,
 										     &bt,
 										     &lut,
@@ -97,15 +143,7 @@ fn main() {
 										     false
 			    );
 
-			    let mut o_list:Vec<Vec<f64>> = Vec::new();
-			    for s in 0..mp_dict.len() {
-				o_list.push(Vec::new());
-				for t in 0..mp_dict[s].len() {
-				    o_list[s].push(0.0);
-				}
-			    }
-			    
-			    let hyper:Arc<HyperParams> = Arc::new(HyperParams::default());
+
 
 			    let now = Instant::now();
 			    println!("STarting estimation");
@@ -114,7 +152,7 @@ fn main() {
 								      mp_dict,
 								      &bt,
 								      &split_indices,
-								      o_list,
+								      mino_list,
 								      hyper.clone(),
 								      &id);
 			    println!("esttime = {}", now.elapsed().as_secs_f64());

@@ -1085,7 +1085,8 @@ impl BurstEntry {
 		    None => {break}
 		};
 		
-		let (startrow, endrow) = BurstEntry::lookup_row_from_aztime(aztime, next_aztime, cur_swath, time_row_lut);
+		let (startrow, endrow) = BurstEntry::lookup_row_from_aztime(aztime, next_aztime, cur_swath, time_row_lut); // Check this here.
+
 
 		// Identify columns.
 		let mut startcol_:Option<usize> = None;
@@ -1147,7 +1148,7 @@ impl BurstEntry {
 	    }
 	}
 	if !found {panic!("Could not resolve lookup table");}
-	
+
 	let cur_row = time_row_lut.lut[swath][best_ind].row;
 
 	// find the next closest row with matching column
@@ -1195,11 +1196,9 @@ impl BurstEntry {
 
 	let slope:f64 = (time_row_lut.lut[swath][next_ind].row - time_row_lut.lut[swath][cur_ind].row) as f64/
             (time_row_lut.lut[swath][next_ind].aztime - time_row_lut.lut[swath][cur_ind].aztime);
-	
-        
-
-	let startrow = (time_row_lut.lut[swath][cur_ind].row as f64 + slope*(aztime - time_row_lut.lut[swath][cur_ind].aztime as f64).max(0.0)) as usize;
-	
+	let startrow = (time_row_lut.lut[swath][cur_ind].row as f64 +
+			slope*(aztime - time_row_lut.lut[swath][cur_ind].aztime as f64)
+			).max(0.0) as usize;
 	let endrow = (time_row_lut.lut[swath][cur_ind].row as f64 + slope*(nextaztime - time_row_lut.lut[swath][cur_ind].aztime) as f64) as usize;
 	//Interpolate between rows.
 
@@ -1423,7 +1422,9 @@ pub struct HyperParams {
     pub add_pad:usize,//? where to pad the adjacent slices
     pub affine_lowpad:usize, // padding for affine subswath computation
     pub affine_highpad:usize,
-    pub affine_var_norm:f64
+    pub affine_var_norm:f64,
+    pub burst_padding:usize //Burst padding when processing segments
+	
 }
 
 
@@ -1434,7 +1435,8 @@ impl HyperParams {
 	    add_pad:0,
 	    affine_lowpad:10,
 	    affine_highpad:30,
-	    affine_var_norm:10000000.0 //variable for normalizing variance calculation for offsets
+	    affine_var_norm:10000000.0, //variable for normalizing variance calculation for offsets
+	    burst_padding:40
 	}
     }
 }

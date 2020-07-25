@@ -25,13 +25,15 @@ impl Index<(usize, usize)> for TwoDArray {
     type Output = f64;
     ///column major order
     fn index(&self, x:(usize, usize)) -> &f64{
-	&self.data[x.0 + x.1*self.rows]
+	//&self.data[x.0 + x.1*self.rows]
+	&self.data[x.1 + x.0*self.cols]
     }
 }
 
 impl IndexMut<(usize, usize)> for TwoDArray {
     fn index_mut(&mut self, x:(usize, usize)) -> &mut Self::Output {
-	&mut self.data[x.0 + x.1*self.rows]
+	//&mut self.data[x.0 + x.1*self.rows]
+	&mut self.data[x.1 + x.0*self.cols]
     }
 }
 
@@ -44,14 +46,14 @@ impl TwoDArray {
 	    return TwoDArray{
 		rows:row,
 		cols:col,
-		data:ndarr.reversed_axes().into_raw_vec()
+		data:ndarr.into_raw_vec()
 	    };
 	}
 	else {
 	    return TwoDArray{
 		rows:row,
 		cols:col,
-		data:ndarr.into_raw_vec()
+		data:ndarr.reversed_axes().into_raw_vec()
 	    };
 	}
     }
@@ -85,6 +87,13 @@ macro_rules! argmin_row {
 	})
     };
 }
+
+macro_rules! unpack_bound {
+    ($sw:expr) => {
+	($sw.fa, $sw.la, $sw.fr, $sw.lr)
+    }
+}
+
 
 /// Gets the clear midpoints.
 /// eval: determines whether to do padded eval midpoints
@@ -344,7 +353,7 @@ fn boxcar(sl:&[f64], hyper:&HyperParams) -> Vec<f64> {
 type EstSegment = Vec<Vec<f64>>;
 fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, ant:ArrToArr,
 		   split_index:Arc<Vec<f64>>, o_value:f64, hyper:Arc<HyperParams> ) -> (EstSegment, EstSegment){
-    let padding:usize = 40;
+    let padding:usize = hyper.burst_padding;
     let num_subswaths = 5; // TODO: fix
 
     // Get mean value
@@ -483,3 +492,124 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 
 
 
+fn determine_mino_value(base:Arc<TwoDArray>,
+			fa:usize,
+			la:usize,
+			fr:usize,
+			lr:usize) -> f64
+{
+    let mut minval:f64 = 99999999999.0;
+    for j in fr..lr {
+	let mut cur = 0.0;
+	let mut count = 0;
+	let mut nonzero = true;
+	for i in fa..la {
+	    nonzero = nonzero & (base[(i,j)] != 0.0);
+	    cur += base[(i,j)];
+	    count+=1;
+	}
+	if nonzero && cur > 0.0 {
+	    minval = minval.min(cur/(count as f64));
+	}
+    }
+    minval
+    //minval.max(0.0)
+}
+pub fn compute_mino_list(base:Arc<TwoDArray>,
+			 burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
+			 hyper:Arc<HyperParams>,
+			 id:&SentinelFormatId) -> Vec<Vec<f64>> {
+    let padding = hyper.burst_padding;
+    let num_subswaths:usize = get_num_subswath!(id);
+    let mut mino_list:Vec<Vec<f64>> = Vec::new();
+
+
+    for swath in 0..num_subswaths {
+	let tmp:Arc<Mutex<Vec<f64>>> = Arc::new(Mutex::new(vec![9999.0;burst_coords[swath].len()]));
+	//let mut handles = Vec::new();
+	for c in 0..burst_coords[swath].len() {
+	    let bt = burst_coords[swath][c].clone();
+	    let tmp_ = tmp.clone();
+	    let base__ = base.clone();
+
+	    // handles.push(thread::spawn(move || {
+	    // 	let (fa_, la_, fr_, lr_ ) = unpack_bound!(bt);
+	    // 	let fa = fa_ + padding;
+	    // 	let la = la_ - padding + 1;
+	    // 	let fr = fr_ + padding;
+	    // 	let lr = lr_ - padding + 1;
+
+	    // 	let mino = determine_mino_value(base__,
+	    // 					fa,la,fr,lr);
+	    // 	tmp_.lock().unwrap()[c] = mino;
+	    // }));
+
+	    let (fa_, la_, fr_, lr_ ) = unpack_bound!(bt);
+	    let fa = fa_ + padding;
+	    let la = la_ - padding + 1;
+	    let fr = fr_ + padding;
+	    let lr = lr_ - padding + 1;
+	    if swath==0 {
+		println!("{} {} {} {} {}", c, fa, la, fr, lr);
+	    }
+	    
+	    let mino = determine_mino_value(base__,
+					    fa,la,fr,lr);
+	    tmp_.lock().unwrap()[c] = mino;
+
+
+	}
+	//let b = handles.len();
+	//for _i in 0..b {handles.pop().unwrap().join().unwrap();}
+
+	mino_list.push(Arc::try_unwrap(tmp).unwrap()
+		       .into_inner().unwrap());
+	
+    }
+
+    mino_list
+    
+}
+/*
+def square_yoff(x, y, burst_coords, mp_dict, sent_mode = 'EW'):
+    """
+    Selects o to be the minimum denoised value from using x-y standard denoising.
+    Should have more success on arctic scenes since it is better calibrated there.
+    """
+    padding = 40
+    ynoised = denoise._denoise_sim(np.sqrt(np.clip(x,0, x.max())), np.sqrt(np.clip(y, 0, y.max())))
+    N = NUMSUBSWATHS[sent_mode]
+    o_list = [ [] for i in range(N)]
+    
+
+    for e in range(N):
+        swath = SUBSWATH_NAMES[sent_mode][e]
+        c=0
+        for fa_, la_, fr_, lr_ in burst_coords[swath]:
+            la_+=1
+            lr_+=1
+            fa = fa_ + padding
+            la = la_ - padding
+            fr = fr_ + padding
+            lr = lr_ - padding
+
+            real_ = ynoised[fa:la,fr:lr] #?
+
+            real_sum = np.sum(real_, axis=0)
+            real_mean = np.zeros(real_.shape[1])
+
+            rmask = np.all(real_ != 0, axis=0)
+
+            #real_mean[rmask ] = real_sum[rmask] / np.sum(real_ != 0, axis=0)[rmask]
+            real_mean[rmask] = np.mean(real_, axis=0)[rmask]
+            #np.min(real_mean[real_mean>0])
+            if np.all(~(real_mean>0)):
+                s = 0
+            else:
+                s = np.min(real_mean[real_mean>0])
+
+            o_list[e].append(s)
+
+            c+=1
+    return o_list
+*/
