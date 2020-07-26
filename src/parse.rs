@@ -1433,8 +1433,8 @@ impl HyperParams {
 	HyperParams{
 	    box_l:51,
 	    add_pad:0,
-	    affine_lowpad:10,
-	    affine_highpad:30,
+	    affine_lowpad:30,
+	    affine_highpad:10,
 	    affine_var_norm:10000000.0, //variable for normalizing variance calculation for offsets
 	    burst_padding:40
 	}

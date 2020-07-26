@@ -72,7 +72,7 @@ fn reduce_col_mean(x:&TwoDArray,
     let mut total = vec![0.0;(la-fa)];
     for i in fa..la {
 	for j in fr..lr {
-	    total[i] += x[(i,j)]/((lr-fr) as f64);
+	    total[i-fa] += x[(i,j)]/((lr-fr) as f64);
 	}
     }
     return total;
@@ -400,6 +400,7 @@ impl LpApply {
 			       swath_bounds.clone(),
 			       hyper.clone(),
 					&id);
+	println!("o={:?}", o);
 	assert!(o.len() == num_subswaths);
 
 	let mut handles = Vec::new();
@@ -471,29 +472,32 @@ impl LpApply {
 	for swath in 0..num_subswaths-1 {
 	    for st in swath_bounds[swath].iter() {
 		let (fa, la, _fr, lr) = unpack_bound!(st);
-		
+		println!("{} {} {} {}: {} {}", fa, la+1, lr-lowpad, lr-highpad, x.rows, x.cols);
+		println!("{} {} {} {}: {} {}", fa, la+1, lr+1+highpad, lr+1+lowpad, x.rows, x.cols);
 		let left_a = reduce_col_mean(&x, fa, la+1, lr-lowpad, lr-highpad);
 		let right_a = reduce_col_mean(&x, fa, la+1, lr+1+highpad, lr+1+lowpad);
 		
 		let ref_left = reduce_col_mean(&original, fa, la+1, lr-lowpad,lr-highpad);
 		let ref_right = reduce_col_mean(&original, fa, la+1, lr+1+highpad, lr+1+lowpad);
 		
-		let var_left:Vec<_> = ref_left.iter().map(|z| z*z/look).collect();
-		let var_right:Vec<_> = ref_right.iter().map(|z| z*z/look).collect();
+		let var_left:Vec<_> = ref_left.iter().map(|z| z*z/look).collect();//
+		let var_right:Vec<_> = ref_right.iter().map(|z| z*z/look).collect();//
 		
 		let combined_var = var_left.iter().zip(var_right.iter()).map(|z| z.0+z.1);
-		let valid = var_left.iter().zip(var_right.iter()).map(|z| *z.0!=0.0 && *z.1!=0.0);
+		let valid = var_left.iter().zip(var_right.iter()).map(|z| (*z.0!=0.0) && (*z.1!=0.0));
 		
 		let w_:(f64, usize) = combined_var.zip(valid).fold((0.0,0), |acc,z| {
 		    if z.1 {return (acc.0+z.0, acc.1+1);}
 		    acc});
-		let w = var_norm/(w_.0/(w_.1 as f64));
+		println!("{} {} {} {} {}", w_.0, w_.1, look, base_l, (lowpad-highpad));
+		let w = var_norm/(w_.0/(w_.1 as f64));//
+		println!("w={}", w);
 		
 		let num_mas:(f64,usize) = left_a.iter().zip(right_a.iter()).fold((0.0,0),|acc,z| {
 		    if (z.0-z.1).abs() < LIM {return (acc.0+z.0-z.1,acc.1+1)}
 		    acc});
 		
-		m[count] = w * num_mas.0/(num_mas.1 as f64);
+		m[count] = w * num_mas.0/(num_mas.1 as f64);//
 
 		C[swath*(num_entries+1) + count] = w;
 		C[(swath+1)*(num_entries+1) + count] = -w;
@@ -501,7 +505,7 @@ impl LpApply {
 	    }
 	}
 
-
+	println!("C={:?}\nb={:?}",C, m);
 	// Add regularization
 	for swath in 0..num_subswaths {C[swath*(num_entries+1) + num_entries] = 1.0;}
 	m[num_entries] = 0.0;
@@ -539,6 +543,8 @@ impl LpApply {
 		  &mut b,
 		  1_i32);
 	}
+	println!("A={:?}\nb={:?}", A, b);
+
 
 	let mut INFO:i32 = 0;
 	let mut IPIV:Vec<i32> = vec![0;num_subswaths];

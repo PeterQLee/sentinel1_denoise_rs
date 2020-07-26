@@ -298,14 +298,18 @@ pub fn get_interpolation_pattern (buffer:&str,
 
 
 fn compute_mean_slice(x:Arc<TwoDArray>, swath_bounds:BurstEntry)  -> Vec<f64> {
-    let mut res = vec![0.0; swath_bounds.lr+1 - swath_bounds.fr];
-    for i in swath_bounds.fr..swath_bounds.lr+1 {
+    let mut res = vec![0.0; swath_bounds.lr - swath_bounds.fr];
+    for i in swath_bounds.fr..swath_bounds.lr {
 	let mut cum_val = 0.0;
-	let norm = (swath_bounds.la+1-swath_bounds.fa) as f64;
-	for j in swath_bounds.fa..swath_bounds.la+1 {
-	    cum_val += x[(j,i)]/norm;
+	let norm = (swath_bounds.la-swath_bounds.fa) as f64;
+	let mut nonzero = true;
+	for j in swath_bounds.fa..swath_bounds.la {
+	    nonzero = nonzero & (x[(j,i)] != 0.0);
+	    cum_val += x[(j,i)].max(0.0)/norm;
 	}
-	res[i-swath_bounds.fr] = cum_val;
+	if nonzero {
+	    res[i-swath_bounds.fr] = cum_val;
+	}
     }
     res
 }
@@ -359,14 +363,19 @@ fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, 
     // Get mean value
     let mut sl = compute_mean_slice(x, BurstEntry{
 	fa:burst_coords.fa + padding,
-	la:burst_coords.la - padding ,
+	la:burst_coords.la - padding + 1 ,
 	fr:burst_coords.fr + padding,
-	lr:burst_coords.lr - padding });
+	lr:burst_coords.lr - padding + 1});
     // ensure that values are above 0
     sl.iter_mut().for_each(|x| if *x < 0.0 { *x = 0.0;});
 
+    // get zero mask to remove the low values that were convolved.
+    let zero_mask = sl.iter().map(|x| *x <= 0.0);
     // get filtered slice
     let mut filt_sl = boxcar(&sl, &hyper);
+    // rezero the appropriate entries
+    // (this ensures we don't get weird drops in output that inhibit LP estimation)
+    filt_sl.iter_mut().zip(zero_mask).for_each(|x| if x.1 {*x.0 = 0.0});
 
     let len_filt = filt_sl.len();
     // next, zero out the weird values on the edges
@@ -424,6 +433,7 @@ fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, 
 	ln_real_list.push(real);
 	ln_ant_list.push(ant);
     }
+    // final segment.
     prev = nex + 2*hyper.add_pad;
     nex = filt_sl.len();
     let (real, ant) = get_seg(prev, nex, &filt_sl, &ant_vals, o_value);
@@ -453,7 +463,7 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 		let mut lant:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
 
 		/* Prepare threads for gathering segments. */
-		let mut thread_handles:Vec<_> = (0..burst_coords[swath].len()).map(
+		let mut thread_handles:Vec<_> = (2..burst_coords[swath].len()).map(
 		    |e| { /* Clone reference counters.*/
 			let x_ = x.clone();
 			let hyper_ = hyper.clone();
@@ -466,8 +476,11 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 			thread::spawn(move || {
 			    let (mut real, mut ant) = process_segment(x_, burst, swath, mp, sind, o, hyper_);
 			    for i in (0..n_splits).rev() {
-				_lreal.lock().unwrap()[i].extend(real.pop().unwrap());
-				_lant.lock().unwrap()[i].extend(ant.pop().unwrap());
+				{ // This will ensure both aspects are locked until mutation is finished.
+				    let mut zd = _lreal.lock().unwrap();
+				    zd[i].extend(real.pop().unwrap());
+				    _lant.lock().unwrap()[i].extend(ant.pop().unwrap());
+				}
 			    }
 			})
 		    }).collect();
@@ -526,41 +539,27 @@ pub fn compute_mino_list(base:Arc<TwoDArray>,
 
     for swath in 0..num_subswaths {
 	let tmp:Arc<Mutex<Vec<f64>>> = Arc::new(Mutex::new(vec![9999.0;burst_coords[swath].len()]));
-	//let mut handles = Vec::new();
+	let mut handles = Vec::new();
 	for c in 0..burst_coords[swath].len() {
 	    let bt = burst_coords[swath][c].clone();
 	    let tmp_ = tmp.clone();
 	    let base__ = base.clone();
 
-	    // handles.push(thread::spawn(move || {
-	    // 	let (fa_, la_, fr_, lr_ ) = unpack_bound!(bt);
-	    // 	let fa = fa_ + padding;
-	    // 	let la = la_ - padding + 1;
-	    // 	let fr = fr_ + padding;
-	    // 	let lr = lr_ - padding + 1;
+	    handles.push(thread::spawn(move || {
+	    	let (fa_, la_, fr_, lr_ ) = unpack_bound!(bt);
+	    	let fa = fa_ + padding;
+	    	let la = la_ - padding + 1;
+	    	let fr = fr_ + padding;
+	    	let lr = lr_ - padding + 1;
 
-	    // 	let mino = determine_mino_value(base__,
-	    // 					fa,la,fr,lr);
-	    // 	tmp_.lock().unwrap()[c] = mino;
-	    // }));
-
-	    let (fa_, la_, fr_, lr_ ) = unpack_bound!(bt);
-	    let fa = fa_ + padding;
-	    let la = la_ - padding + 1;
-	    let fr = fr_ + padding;
-	    let lr = lr_ - padding + 1;
-	    if swath==0 {
-		println!("{} {} {} {} {}", c, fa, la, fr, lr);
-	    }
-	    
-	    let mino = determine_mino_value(base__,
-					    fa,la,fr,lr);
-	    tmp_.lock().unwrap()[c] = mino;
-
+	    	let mino = determine_mino_value(base__,
+	    					fa,la,fr,lr);
+	    	tmp_.lock().unwrap()[c] = mino;
+	    }));
 
 	}
-	//let b = handles.len();
-	//for _i in 0..b {handles.pop().unwrap().join().unwrap();}
+	let b = handles.len();
+	for _i in 0..b {handles.pop().unwrap().join().unwrap();}
 
 	mino_list.push(Arc::try_unwrap(tmp).unwrap()
 		       .into_inner().unwrap());

@@ -107,21 +107,7 @@ fn main() {
 			    let hyper:Arc<HyperParams> = Arc::new(HyperParams::default());
 
 			    let min_time = Instant::now();
-			    /*
-			    println!("first_burst = {} {} {} {}",
-				     bt[0][0].fa,
-				     bt[0][0].la,
-				     bt[0][0].fr,
-				     bt[0][0].lr);
-			   
-			    println!("lut {} {} {} {}", lut.lut[0][0].row, lut.lut[0][0].col, lut.lut[0][0].elevangle, lut.lut[0][0].aztime);
-			    println!("lut {} {} {} {}", lut.lut[0][1].row, lut.lut[0][1].col, lut.lut[0][1].elevangle, lut.lut[0][1].aztime);*/
 
-			    /*
-			    println!("start={}", base_v[(0,0)]);
-			    println!("start={}", base_v[(0,100)]);
-			    println!("start={}", base_v[(100,0)]);
-			    println!("{}", base_v[(500,500)]);*/
 			    let mut mino_list:Vec<Vec<f64>> = compute_mino_list(
 				base_v.clone(),
 				//xv.clone(),
@@ -133,7 +119,6 @@ fn main() {
 			    println!("mino_time = {}", min_time.elapsed().as_secs_f64());
 			    println!("mino_values={:?}", mino_list);
 			    
-			    panic!("");
 
 			    let (mp_dict, split_indices) = get_interpolation_pattern(&buffer,
 										     &bt,
@@ -142,6 +127,15 @@ fn main() {
 										     &id,
 										     false
 			    );
+
+			    // match split_indices {
+			    // 	MidPoint::Est(splitind) => {
+			    // 	    println!("{:?}", splitind);
+			    // 	},
+			    // 	MidPoint::Test(_) => {}
+			    // }
+
+			    // panic!("");
 
 
 
