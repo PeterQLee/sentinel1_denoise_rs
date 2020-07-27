@@ -267,7 +267,7 @@ impl LpApply {
 					  &aznoise,
 					  fa, la, fr, lr);
 	    
-	    //apply
+	    //return pattern used.
 	    p_ant
 		
 	};
@@ -301,12 +301,12 @@ impl LpApply {
 	    let p_ant = apply_subtract(s_fa, s_la, fr, lr);
 	    
 	    // Check missing row
-	    if cur_burst == num_burst-1 && la > s_la {
+	    if cur_burst == num_burst-1 && la > b_la { // TODOThis literally doesn't make sense
 		/* appply */
 		LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
 					      &p_ant,
 					      &aznoise,
-					      fa, la, fr, lr);
+					      b_la, la, fr, lr);
 	    }
 	    else if cur_burst < num_burst-1 { // Apply between burst coordinates
 		let (n_fa, _n_la, _n_fr, _n_lr) = unpack_bound!(next_burst.clone().unwrap());
@@ -390,14 +390,15 @@ impl LpApply {
  
     
     pub fn apply_affine(x:Arc<TwoDArray>,
-			  original:TwoDArray,
-			  swath_bounds:Arc<Vec<Vec<SwathElem>>>,
-			  hyper:Arc<HyperParams>,
+			original:TwoDArray,
+			burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
+			swath_bounds:Arc<Vec<Vec<SwathElem>>>,
+			hyper:Arc<HyperParams>,
 			id:&SentinelFormatId) {
 	let num_subswaths:usize = get_num_subswath!(id);
 	let o = LpApply::compute_affine(x.clone(),
 			       original,
-			       swath_bounds.clone(),
+			       burst_coords,
 			       hyper.clone(),
 					&id);
 	println!("o={:?}", o);
@@ -445,7 +446,7 @@ impl LpApply {
     #[allow(non_snake_case)]
     fn compute_affine(x:Arc<TwoDArray>,
 			  original:TwoDArray,
-			  swath_bounds:Arc<Vec<Vec<SwathElem>>>,
+			  burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 			  hyper:Arc<HyperParams>,
 			  id:&SentinelFormatId) -> Vec<f64>{
 			  
@@ -463,14 +464,14 @@ impl LpApply {
 	let look:f64 = ((lowpad - highpad) as f64)*base_l;
 
 	let num_entries:usize = (0..num_subswaths-1).fold(0,|acc1, z1| {
-	    acc1 + swath_bounds[z1].len()});
+	    acc1 + burst_coords[z1].len()});
 	
 	let mut m:Vec<f64> = vec![0.0;num_entries+1]; // num swath bounds plus 1 for regularization
 	let mut C:Vec<f64> = vec![0.0;(num_entries+1)*num_subswaths]; //(num_entries+1) by num_subswaths matrix
 
 	let mut count:usize = 0;
 	for swath in 0..num_subswaths-1 {
-	    for st in swath_bounds[swath].iter() {
+	    for st in burst_coords[swath].iter() {
 		let (fa, la, _fr, lr) = unpack_bound!(st);
 		println!("{} {} {} {}: {} {}", fa, la+1, lr-lowpad, lr-highpad, x.rows, x.cols);
 		println!("{} {} {} {}: {} {}", fa, la+1, lr+1+highpad, lr+1+lowpad, x.rows, x.cols);
@@ -505,11 +506,11 @@ impl LpApply {
 	    }
 	}
 
-	println!("C={:?}\nb={:?}",C, m);
+
 	// Add regularization
 	for swath in 0..num_subswaths {C[swath*(num_entries+1) + num_entries] = 1.0;}
 	m[num_entries] = 0.0;
-
+	println!("C={:?}\nb={:?}",C, m);
 	//Solve least squares problem..
 
 	let mut A = vec![0.0;num_subswaths*num_subswaths];

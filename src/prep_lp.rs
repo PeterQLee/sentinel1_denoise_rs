@@ -165,7 +165,8 @@ fn compute_midpoint(pat_angle:&Vec<f64>, pat_vals:&Vec<f64>, swath:usize, id:&Se
     
 }
 
-
+/// Builds a quadratic spline to map angles to the index/intensity lookup table.
+/// http://nmbooks.eng.usf.edu/ebooks/05inp_spline/inp_05_spline_300_quadratic_example.html
 fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     // We assume that x is sorted
     let x_c:Vec<f64> = x.to_vec();
