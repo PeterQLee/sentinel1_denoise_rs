@@ -184,9 +184,6 @@ impl LpApply {
 	    let nex = lr.min(m.1.round() as usize);
 
 	    /* compute p_ant in this undisputed region */
-	    //println!("pantsize = {}, max={}",p_ant.len(), nex-fr);
-	    //println!("antsize = {}, max={}",ant.len(), nex-fr);
-	    //println!("plen = {} {}",lin_params.len(),i);
 	    p_ant[prev-fr..nex-fr].iter_mut()
 		.zip(ant[prev-fr..nex-fr].iter())
 		.for_each(|x| *x.0 = lin_params[i].b.exp() * x.1.powf(lin_params[i].m));
@@ -401,7 +398,7 @@ impl LpApply {
 			       burst_coords,
 			       hyper.clone(),
 					&id);
-	println!("o={:?}", o);
+
 	assert!(o.len() == num_subswaths);
 
 	let mut handles = Vec::new();
@@ -473,8 +470,6 @@ impl LpApply {
 	for swath in 0..num_subswaths-1 {
 	    for st in burst_coords[swath].iter() {
 		let (fa, la, _fr, lr) = unpack_bound!(st);
-		println!("{} {} {} {}: {} {}", fa, la+1, lr-lowpad, lr-highpad, x.rows, x.cols);
-		println!("{} {} {} {}: {} {}", fa, la+1, lr+1+highpad, lr+1+lowpad, x.rows, x.cols);
 		let left_a = reduce_col_mean(&x, fa, la+1, lr-lowpad, lr-highpad);
 		let right_a = reduce_col_mean(&x, fa, la+1, lr+1+highpad, lr+1+lowpad);
 		
@@ -490,9 +485,7 @@ impl LpApply {
 		let w_:(f64, usize) = combined_var.zip(valid).fold((0.0,0), |acc,z| {
 		    if z.1 {return (acc.0+z.0, acc.1+1);}
 		    acc});
-		println!("{} {} {} {} {}", w_.0, w_.1, look, base_l, (lowpad-highpad));
 		let w = var_norm/(w_.0/(w_.1 as f64));//
-		println!("w={}", w);
 		
 		let num_mas:(f64,usize) = left_a.iter().zip(right_a.iter()).fold((0.0,0),|acc,z| {
 		    if (z.0-z.1).abs() < LIM {return (acc.0+z.0-z.1,acc.1+1)}
@@ -510,7 +503,6 @@ impl LpApply {
 	// Add regularization
 	for swath in 0..num_subswaths {C[swath*(num_entries+1) + num_entries] = 1.0;}
 	m[num_entries] = 0.0;
-	println!("C={:?}\nb={:?}",C, m);
 	//Solve least squares problem..
 
 	let mut A = vec![0.0;num_subswaths*num_subswaths];
@@ -544,7 +536,6 @@ impl LpApply {
 		  &mut b,
 		  1_i32);
 	}
-	println!("A={:?}\nb={:?}", A, b);
 
 
 	let mut INFO:i32 = 0;

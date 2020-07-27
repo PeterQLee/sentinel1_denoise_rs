@@ -167,48 +167,102 @@ fn compute_midpoint(pat_angle:&Vec<f64>, pat_vals:&Vec<f64>, swath:usize, id:&Se
 
 /// Builds a quadratic spline to map angles to the index/intensity lookup table.
 /// http://nmbooks.eng.usf.edu/ebooks/05inp_spline/inp_05_spline_300_quadratic_example.html
+/// Computes splines that go through all the points and is first order derivative continuous.
 fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     // We assume that x is sorted
     let x_c:Vec<f64> = x.to_vec();
+    let num_segments = x_c.len()-1;
+    let num_params = num_segments * 3;
+    
+    // Check sorted
+
+    for i in 0..num_segments {
+	assert!(x_c[i] <= x_c[i+1]);
+    }
     let k = 2;
 
-    let mut coef_list:Vec<(f64, f64, f64)> = Vec::new();
-    
-    for e in 0..x.len()-2 {
-	let x0 = x[e];
-	let x1 = x[e+1];
-	let x2 = x[e+2];
-	let y0 = y[e];
-	let y1 = y[e+1];
-	let y2 = y[e+2];
-	
-	let mut A = vec![0.0;(k+1)*(k+1)];
-	let mut b = vec![0.0;k+1];
-	
-	for i in 0..k+1 {
-	    b[i] = x0.powi(i as i32) * y0 + x1.powi(i as i32) * y1 + x2.powi(i as i32) * y2;
-	    for j in 0..k+1 {
-		A[j*(k+1) + i] = x0.powi((i+j) as i32) + x1.powi((i+j) as i32) + x2.powi((i+j) as i32);
-	    }
-	}
-	// Solve linear system.
-	let mut INFO:i32 = 0;
-	let mut IPIV:Vec<i32> = vec![0;k+1];
+    // Going to set up a banded matrix to compute the coefficients of the matrix
+    // This matrix is setup with 1 upper diagonal and 3 lower diagonals.
+    let kl = 3;
+    let ku = 1;
 
-	// dgesv (square system)
-	unsafe {
-	    dgesv((k+1) as i32,//num eqs
-		  1 as i32,//num eqs
-		  &mut A,
-		  (k+1) as i32,//leading dim of A
-		  &mut IPIV,//pivot matrix
-		  &mut b,/////// right hand side
-		  (k+1) as i32,//LDB
-		  &mut INFO);
-	}
-	assert!(INFO == 0);
-	coef_list.push((b[0], b[1], b[2]));
+    let mut ab = vec![0.0;(2*kl+ku+1)*num_params];
+    let mut b = vec![0.0;num_params];
+    
+    // set the first parameters.
+    ab[kl+1] = 1.0; //constraint for first point.
+
+    // return col major index.
+    let compute_ind = |c, j| -> usize {
+	let bi:isize = (j as isize) - 1;
+	let l:usize = ((c as isize) - bi) as usize;
+
+	let row:usize = kl +l;
+
+	row + j*(2*kl+ku+1)
+	
+    };
+
+    let mut c:usize = 1;
+    let mut v:usize = 0;
+    for i in 0..num_segments-1 {
+	ab[compute_ind(c,  v+0)] = x[i]*x[i];
+	ab[compute_ind(c,  v+1)] = x[i];
+	ab[compute_ind(c,  v+2)] = 1.0;
+
+	b[c] = y[i];
+	c += 1;
+
+	ab[compute_ind(c,  v+0)] = x[i+1]*x[i+1];
+	ab[compute_ind(c,  v+1)] = x[i+1];
+	ab[compute_ind(c,  v+2)] = 1.0;
+	
+	b[c] = y[i+1];
+	c += 1;
+
+	ab[compute_ind(c,  v+0)] = 2.0*x[i+1];
+	ab[compute_ind(c,  v+1)] = 1.0;
+	ab[compute_ind(c,  v+3+0)] = -2.0*x[i+1];
+	ab[compute_ind(c,  v+3+1)] = -1.0;
+	
+	b[c] = 0.0;
+	c += 1;
+
+	v+=3;
+	
     }
+    let i = num_segments-1;
+    ab[compute_ind(c, v+0)] = x[i]*x[i];
+    ab[compute_ind(c, v+1)] = x[i];
+    ab[compute_ind(c, v+2)] = 1.0;
+  
+    b[c] = y[i];
+    c += 1;
+  
+    ab[compute_ind(c, v+0)] = x[i+1]*x[i+1];
+    ab[compute_ind(c, v+1)] = x[i+1];
+    ab[compute_ind(c, v+2)] = 1.0;
+    
+    b[c] = y[i+1];
+    c += 1;
+    let mut ipiv:Vec<i32> = vec![0;num_params];
+    let mut info:i32 = 0;
+    assert!(c == num_params);
+    unsafe {
+	dgbsv(num_params as i32,// num eqs
+	      kl as i32,
+	      ku as i32,
+	      1,//num rows in b
+	      &mut ab,
+	      (2*kl+ku+1) as i32,
+	      &mut ipiv,
+	      &mut b,
+	      num_params as i32,
+	      &mut info
+	);
+    }
+    assert!(info == 0);
+
 
     fn apply_quad(s:f64, coef:(f64, f64, f64)) -> f64 {
 	coef.0 + s*coef.1 + s*s*coef.2
@@ -217,12 +271,12 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     Arc::new(move |cols:&[usize]| -> Vec<f64> {
 	cols.iter().map(|s_| {
 	    let s = (*s_) as f64;
-	    if s <= x_c[0] {apply_quad(s, coef_list[0])}
-	    else if s >= x_c[len_x-3] {apply_quad(s, *coef_list.last().unwrap())}
+	    if s <= x_c[0] {apply_quad(s, (b[2], b[1], b[0]))}
+	    else if s >= x_c[len_x-1] {apply_quad(s, (b[num_params-1], b[num_params-2], b[num_params-3]))}
 	    else {
 		match x_c.binary_search_by(|sd| sd.partial_cmp(&s).expect("Nan encountered") ) {
-		    Ok(t) => apply_quad(s,coef_list[t]),
-		    Err(e) => apply_quad(s, coef_list[e-1])
+		    Ok(t) => apply_quad(s,(b[t*3+2], b[t*3+1], b[t*3])),
+		    Err(e) => apply_quad(s, (b[(e-1)*3+2], b[(e-1)*3+1], b[(e-1)*3]))
 		}
 	    }
 

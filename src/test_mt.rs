@@ -144,36 +144,36 @@ fn main() {
 			    println!("STarting estimation");
 
 
-			    let params = vec![vec![lin_params{m:-0.8377733689566139,b:-0.2025279720745586},
-						   lin_params{m:-0.9723938708288736,b:-1.6776604853424189},
-						   lin_params{m:-0.9054118801130412,b:-0.9201355234321253},
-						   lin_params{m:-1.028078807358591,b:-2.1856211206259}],
-					      vec![lin_params{m:-0.934131913806733,b:-1.4268323166874244},
-						   lin_params{m:-0.9177767643521143,b:-1.2959926244923616}],
-					      vec![lin_params{m:-0.823403463508079,b:-0.45968670861395355},
-						   lin_params{m:-0.8415358934549954,b:-0.6786519733490952}],
-					      vec![lin_params{m:-0.9852695908059192,b:-2.0179827020045806},
-						   lin_params{m:-1.0219083156627395,b:-2.3977230998105945}],
-					      vec![lin_params{m:-0.8833173491847943,b:-1.2279051705374089},
-						   lin_params{m:-1.0246303288517278,b:-2.44576620318716},]];
+			    // let params = vec![vec![lin_params{m:-0.8377733689566139,b:-0.2025279720745586},
+			    // 			   lin_params{m:-0.9723938708288736,b:-1.6776604853424189},
+			    // 			   lin_params{m:-0.9054118801130412,b:-0.9201355234321253},
+			    // 			   lin_params{m:-1.028078807358591,b:-2.1856211206259}],
+			    // 		      vec![lin_params{m:-0.934131913806733,b:-1.4268323166874244},
+			    // 			   lin_params{m:-0.9177767643521143,b:-1.2959926244923616}],
+			    // 		      vec![lin_params{m:-0.823403463508079,b:-0.45968670861395355},
+			    // 			   lin_params{m:-0.8415358934549954,b:-0.6786519733490952}],
+			    // 		      vec![lin_params{m:-0.9852695908059192,b:-2.0179827020045806},
+			    // 			   lin_params{m:-1.0219083156627395,b:-2.3977230998105945}],
+			    // 		      vec![lin_params{m:-0.8833173491847943,b:-1.2279051705374089},
+			    // 			   lin_params{m:-1.0246303288517278,b:-2.44576620318716},]];
 					
 
 			    // Estimation
-			    // let params = select_and_estimate_segments(xv.clone(),
-			    // 					      mp_dict,
-			    // 					      &bt,
-			    // 					      &split_indices,
-			    // 					      mino_list,
-			    // 					      hyper.clone(),
-			    // 					      &id);
-			    // println!("esttime = {}", now.elapsed().as_secs_f64());
+			    let params = select_and_estimate_segments(xv.clone(),
+			    					      mp_dict,
+			    					      &bt,
+			    					      &split_indices,
+			    					      mino_list,
+			    					      hyper.clone(),
+			    					      &id);
+			    println!("esttime = {}", now.elapsed().as_secs_f64());
 			    
-			    // for i in params.iter() {
-			    // 	println!("Size = {}", i.len());
-			    // 	for j in i.iter() {
-			    // 	    println!("m={} b={}", j.m, j.b);
-			    // 	}
-			    // }
+			    for i in params.iter() {
+			    	println!("Size = {}", i.len());
+			    	for j in i.iter() {
+			    	    println!("m={} b={}", j.m, j.b);
+			    	}
+			    }
 
 			    let (r_mp_dict, r_split_indices) = get_interpolation_pattern(&buffer,
 										     &bt,
