@@ -1,13 +1,31 @@
 // Linear algebra
-
+use std::sync::Arc;
+use crate::parse::HyperParams;
+    
 # [ repr ( C ) ] # [ derive ( Debug , Copy , Clone ) ]
 pub struct lin_params { pub m : f64 , pub b : f64 , }
 
+#[repr(C)]
+#[derive ( Debug , Copy , Clone )]
+pub struct lp_scs_settings {
+    pub normalize : ::std::os::raw::c_int,
+    pub scale : f64 ,
+    pub rho_x : f64 ,
+    pub max_iters : ::std::os::raw::c_int,
+    pub eps : f64 ,
+    pub cg_rate : f64 ,
+    pub verbose : ::std::os::raw::c_int , } 
+
 extern "C" {
-    pub fn scs_solve_lp ( n : :: std :: os :: raw :: c_uint , m : :: std :: os :: raw :: c_uint , A : * mut f64 , b : * mut f64 , c : * mut f64 ) -> lin_params ; }
+    pub fn scs_solve_lp ( n : ::std::os::raw::c_uint,
+			  m : ::std::os::raw::c_uint ,
+			  A : * mut f64 ,
+			  b : * mut f64 ,
+			  c : * mut f64,
+			  settings : * mut lp_scs_settings) -> lin_params ; }
 
 #[allow(non_snake_case)]
-pub fn solve_lp(lreal:&[f64], lant:&[f64]) -> lin_params {
+pub fn solve_lp(lreal:&[f64], lant:&[f64], hyper:Arc<HyperParams>) -> lin_params {
     let m = lreal.len() + 2; // num constraints
     let n  = 2; // num variables
 
@@ -38,7 +56,15 @@ pub fn solve_lp(lreal:&[f64], lant:&[f64]) -> lin_params {
     c[0] = -gamma;
     c[1] = -1.0;
 
+    let mut scs_variables = hyper.get_scs();
+
     // Solve the problem
-    unsafe {scs_solve_lp(n as std::os::raw::c_uint, m as std::os::raw::c_uint, A.as_mut_ptr(), b.as_mut_ptr(), c.as_mut_ptr())}
+    unsafe {scs_solve_lp(n as std::os::raw::c_uint,
+			 m as std::os::raw::c_uint,
+			 A.as_mut_ptr(),
+			 b.as_mut_ptr(),
+			 c.as_mut_ptr(),
+			 &mut scs_variables
+    )}
     
 }

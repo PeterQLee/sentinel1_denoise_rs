@@ -548,7 +548,7 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 		ret.push(
 		    lreal.lock().unwrap().iter()
 			.zip(lant.lock().unwrap().iter())
-			.map(|x| crate::est_lp::solve_lp(&x.0, &x.1)).collect());
+			.map(|x| crate::est_lp::solve_lp(&x.0, &x.1, hyper.clone())).collect());
 		
 	    }
 	}

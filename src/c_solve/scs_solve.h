@@ -20,8 +20,19 @@ struct SCS_A_DATA_MATRIX {
   scs_int m, n; /* m rows, n cols */
 };
 
+typedef struct {
+  int normalize;
+  double scale;
+  double rho_x;
+  int max_iters;
+  double eps;
+  double cg_rate;
+  int verbose;
+}lp_scs_settings;
 lin_params scs_solve_lp(unsigned int n,
-		    unsigned int m,
-		    double *A,
-		    double *b,
-		    double *c);
+			unsigned int m,
+			double *A,
+			double *b,
+			double *c,
+			lp_scs_settings *settings
+			);

@@ -1,18 +1,19 @@
 /// Module is responsible for extracting data directly from xml files.
+use crate::read_from_archive::SentinelFormatId;
+use crate::est_lp::lp_scs_settings;
+
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
 use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayView1, ArrayView2, ArrayViewMut2, Slice};
 use ndarray::Zip;
 use ndarray::prelude::*;
-//use ndarray::parallel::prelude::*;
-//use ndarray_parallel::prelude::*;
 use rayon::prelude::*;
-//use itertools::Itertools;
+
 use chrono::prelude::*;
-use crate::read_from_archive::SentinelFormatId;
 
 use std::collections::HashSet;
+
 // Linear algebra
 use lapack::*;
 use blas::*;
@@ -1423,12 +1424,21 @@ pub struct HyperParams {
     pub affine_lowpad:usize, // padding for affine subswath computation
     pub affine_highpad:usize,
     pub affine_var_norm:f64,
-    pub burst_padding:usize //Burst padding when processing segments
-	
+    pub burst_padding:usize, //Burst padding when processing segments
+    
+    pub scs_normalize:u32,
+    pub scs_scale:f64,
+    pub scs_rho_x:f64,
+    pub scs_max_iters : u32,
+    pub scs_eps : f64 ,
+    pub scs_cg_rate : f64 ,
+    pub scs_verbose : u32 , 
+
 }
 
 
 impl HyperParams {
+    /// Default parameters if no config file specified
     pub fn default() -> HyperParams{
 	HyperParams{
 	    box_l:51,
@@ -1436,7 +1446,30 @@ impl HyperParams {
 	    affine_lowpad:30,
 	    affine_highpad:10,
 	    affine_var_norm:10000000.0, //variable for normalizing variance calculation for offsets
-	    burst_padding:40
+	    burst_padding:40,
+
+	    scs_normalize:1,
+	    scs_scale:1.0,
+	    scs_rho_x:1.0e-3,
+	    scs_max_iters : 1000,
+	    scs_eps : 1.0e-5 ,
+	    scs_cg_rate : 2.0 ,
+	    scs_verbose : 0
+	}
+    }
+    /// Extract parameters from config file.
+    pub fn parse_config() {
+    }
+
+    pub fn get_scs(&self) -> lp_scs_settings {
+	lp_scs_settings {
+	    normalize:self.scs_normalize as ::std::os::raw::c_int,
+	    scale:self.scs_scale,
+	    rho_x:self.scs_rho_x,
+	    max_iters:self.scs_max_iters as ::std::os::raw::c_int,
+	    eps:self.scs_eps,
+	    cg_rate:self.scs_cg_rate,
+	    verbose:self.scs_verbose as ::std::os::raw::c_int
 	}
     }
 }

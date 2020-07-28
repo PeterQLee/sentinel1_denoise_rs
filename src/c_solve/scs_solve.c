@@ -1,12 +1,26 @@
 #include "scs_solve.h"
 #include <string.h>
 #include <stdio.h>
+
+void copy_settings(ScsSettings *x,
+		   lp_scs_settings *y) {
+  x->normalize = y->normalize;
+  x->scale = y->scale;
+  x->rho_x = y->rho_x;
+  x->max_iters = y->max_iters;
+  x->eps = y->eps;
+  x->cg_rate = y->cg_rate;
+  x->verbose = y->verbose;
+  
+}
 lin_params scs_solve_lp(unsigned int n,
-		    unsigned int m,
-		    double *A_,
-		    double *b_,
-		    double *c_) {
+			unsigned int m,
+			double *A_,
+			double *b_,
+			double *c_,
+			lp_scs_settings *settings) {
   ScsCone *k = (ScsCone *)scs_calloc(1, sizeof(ScsCone));
+
   ScsData *d = (ScsData *)scs_calloc(1, sizeof(ScsData));
   ScsSolution *sol = (ScsSolution *)scs_calloc(1, sizeof(ScsSolution));
   ScsInfo info = {0};
@@ -43,6 +57,8 @@ lin_params scs_solve_lp(unsigned int n,
     A->i[m+i] = i;
   }
   SCS(set_default_settings)(d);
+  copy_settings(d->stgs, settings);
+
   // solve
   scs(d, k, sol, &info);
   // extract result
