@@ -383,20 +383,64 @@ impl LpApply {
 	}
     }
     
-/*def square_gapless_segmethod_denoise(x, y, mp_dict, slope_list, intercept_list, burst_coords, swath_bounds,  azimuth_noise, split_indices, sent_mode = 'EW', one_flag = False):*/
- 
-    
+    /// Premptively compute weights using the original array.
+    pub fn compute_weights_for_affine(
+	original:&TwoDArray, // probably change to array ref
+	burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
+	hyper:Arc<HyperParams>,
+	id:&SentinelFormatId) -> Vec<Vec<f64>> {
+	let mut w_vec = Vec::new();
+
+	let num_subswaths:usize = get_num_subswath!(id);
+	let base_l:f64 = get_look!(id); // looks in the sentinel image type
+
+	let lowpad = hyper.affine_lowpad;
+	let highpad = hyper.affine_highpad;
+	let look:f64 = ((lowpad - highpad) as f64)*base_l;
+	
+	let var_norm = hyper.affine_var_norm; // Normalization for variance computation
+
+	for swath in 0..num_subswaths-1 {
+	    let mut tmp = Vec::new();
+	    for st in burst_coords[swath].iter() {
+		let (fa, la, _fr, lr) = unpack_bound!(st);
+		
+		let ref_left = reduce_col_mean(original, fa, la+1, lr-lowpad,lr-highpad);
+		let ref_right = reduce_col_mean(original, fa, la+1, lr+1+highpad, lr+1+lowpad);
+
+		let var_left:Vec<_> = ref_left.iter().map(|z| z*z/look).collect();//
+		let var_right:Vec<_> = ref_right.iter().map(|z| z*z/look).collect();//
+
+		let combined_var = var_left.iter().zip(var_right.iter()).map(|z| z.0+z.1);
+		let valid = var_left.iter().zip(var_right.iter()).map(|z| (*z.0!=0.0) && (*z.1!=0.0));
+
+		let w_:(f64, usize) = combined_var.zip(valid).fold((0.0,0), |acc,z| {
+		    if z.1 {return (acc.0+z.0, acc.1+1);}
+		    acc});
+		let w = var_norm/(w_.0/(w_.1 as f64));//
+
+		tmp.push(w);
+	    }
+	    w_vec.push(tmp);
+	}
+	
+	w_vec
+    }
+	
+	
+	
+    /*def square_gapless_segmethod_denoise(x, y, mp_dict, slope_list, intercept_list, burst_coords, swath_bounds,  azimuth_noise, split_indices, sent_mode = 'EW', one_flag = False):*/
     pub fn apply_affine(x:Arc<TwoDArray>,
-			original:TwoDArray,
+			w_vec:Vec<Vec<f64>>,
 			burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 			swath_bounds:Arc<Vec<Vec<SwathElem>>>,
 			hyper:Arc<HyperParams>,
 			id:&SentinelFormatId) {
 	let num_subswaths:usize = get_num_subswath!(id);
 	let o = LpApply::compute_affine(x.clone(),
-			       original,
-			       burst_coords,
-			       hyper.clone(),
+					w_vec,
+					burst_coords,
+					hyper.clone(),
 					&id);
 
 	assert!(o.len() == num_subswaths);
@@ -442,23 +486,19 @@ impl LpApply {
     /// Least squares compute offset.
     #[allow(non_snake_case)]
     fn compute_affine(x:Arc<TwoDArray>,
-			  original:TwoDArray,
-			  burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
-			  hyper:Arc<HyperParams>,
-			  id:&SentinelFormatId) -> Vec<f64>{
+		      vec_w:Vec<Vec<f64>>,
+		      burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
+		      hyper:Arc<HyperParams>,
+		      id:&SentinelFormatId) -> Vec<f64>{
 			  
 	
 	let num_subswaths:usize = get_num_subswath!(id);
-	let base_l:f64 = get_look!(id); // looks in the sentinel image type
-	// TODO: need to adjust 
+
 	let lowpad = hyper.affine_lowpad;
 	let highpad = hyper.affine_highpad;
 
-	let var_norm = hyper.affine_var_norm; // Normalization for
 	let LIM = if id.sentmode.as_str() == "EW" {2000000.0}
 	else {5000000.0};
-
-	let look:f64 = ((lowpad - highpad) as f64)*base_l;
 
 	let num_entries:usize = (0..num_subswaths-1).fold(0,|acc1, z1| {
 	    acc1 + burst_coords[z1].len()});
@@ -468,24 +508,12 @@ impl LpApply {
 
 	let mut count:usize = 0;
 	for swath in 0..num_subswaths-1 {
-	    for st in burst_coords[swath].iter() {
+	    for (e,st) in burst_coords[swath].iter().enumerate() {
 		let (fa, la, _fr, lr) = unpack_bound!(st);
 		let left_a = reduce_col_mean(&x, fa, la+1, lr-lowpad, lr-highpad);
 		let right_a = reduce_col_mean(&x, fa, la+1, lr+1+highpad, lr+1+lowpad);
 		
-		let ref_left = reduce_col_mean(&original, fa, la+1, lr-lowpad,lr-highpad);
-		let ref_right = reduce_col_mean(&original, fa, la+1, lr+1+highpad, lr+1+lowpad);
-		
-		let var_left:Vec<_> = ref_left.iter().map(|z| z*z/look).collect();//
-		let var_right:Vec<_> = ref_right.iter().map(|z| z*z/look).collect();//
-		
-		let combined_var = var_left.iter().zip(var_right.iter()).map(|z| z.0+z.1);
-		let valid = var_left.iter().zip(var_right.iter()).map(|z| (*z.0!=0.0) && (*z.1!=0.0));
-		
-		let w_:(f64, usize) = combined_var.zip(valid).fold((0.0,0), |acc,z| {
-		    if z.1 {return (acc.0+z.0, acc.1+1);}
-		    acc});
-		let w = var_norm/(w_.0/(w_.1 as f64));//
+		let w = vec_w[swath][e];
 		
 		let num_mas:(f64,usize) = left_a.iter().zip(right_a.iter()).fold((0.0,0),|acc,z| {
 		    if (z.0-z.1).abs() < LIM {return (acc.0+z.0-z.1,acc.1+1)}

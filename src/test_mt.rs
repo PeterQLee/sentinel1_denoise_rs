@@ -202,9 +202,14 @@ fn main() {
 			    let d = (bt[3][4].la, bt[3][4].lr+2);
 			    println!("{} {} {} {}",xv[a],xv[b],xv[c],xv[d]);
 
+			    let w_vec = LpApply::compute_weights_for_affine(
+				&TwoDArray::from_ndarray(original.clone()),
+				&bt,
+				hyper.clone(),
+				&id);
 
 			    LpApply::apply_affine(xv.clone(),
-						  TwoDArray::from_ndarray(original.clone()),
+						  w_vec,
 						  &bt,
 						  sb1,
 						  hyper.clone(),
