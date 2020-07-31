@@ -1471,3 +1471,20 @@ impl HyperParams {
 	}
     }
 }
+/// Linear parameters for linear rescaling method.
+pub struct LinearConfig {
+    pub mu:f64,
+    pub gamma:f64,
+    pub lambda:[f64;5],
+    pub lambda2:f64
+}
+impl LinearConfig {
+    pub fn default() -> LinearConfig {
+	LinearConfig {
+	    mu:1.7899,
+	    gamma:2.0,
+	    lambda:[0.1,0.1,6.75124,2.78253,10.0].into(),
+	    lambda2:1.0
+	}
+    }
+}
