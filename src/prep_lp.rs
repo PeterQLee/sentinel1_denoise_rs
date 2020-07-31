@@ -10,11 +10,12 @@ use std::ops::{Index, IndexMut};
 // FFT libs for fast convolution.
 use rustfft::FFTplanner;
 use rustfft::num_complex::Complex64;
-use ndarray::{ArrayView2, Array2};
+use ndarray::{Array2, ArrayView, Ix2};
 use std::thread;
 
 pub type ArrToArr = Arc<Fn(&[usize]) -> Vec<f64> + Sync + Send> ;
 
+#[derive(Debug)]
 pub struct TwoDArray{
     pub rows:usize,
     pub cols:usize,
@@ -56,6 +57,11 @@ impl TwoDArray {
 		data:ndarr.reversed_axes().into_raw_vec()
 	    };
 	}
+    }
+    
+    pub fn to_ndarray<'a>(&'a self) -> ArrayView<'a, f64, Ix2> {
+	ArrayView::from_shape((self.rows, self.cols),
+			      &self.data).unwrap()
     }
 }
 
@@ -514,8 +520,8 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 	MidPoint::Est(splitind) => {
 	    for swath in 0..num_subswaths {
 		let n_splits:usize = splitind[swath][0].len() + 1;
-		let mut lreal:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
-		let mut lant:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
+		let lreal:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
+		let lant:Arc<Mutex<EstSegment>> = Arc::new(Mutex::new(vec![Vec::new();n_splits]));
 
 		/* Prepare threads for gathering segments. */
 		let mut thread_handles:Vec<_> = (2..burst_coords[swath].len()).map(

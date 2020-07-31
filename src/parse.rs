@@ -5,7 +5,7 @@ use crate::est_lp::lp_scs_settings;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::str;
-use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayView1, ArrayView2, ArrayViewMut2, Slice};
+use ndarray::{Array1, Array2, Axis, ArrayViewMut2, Slice};
 use ndarray::Zip;
 use ndarray::prelude::*;
 use rayon::prelude::*;
@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 // Linear algebra
 use lapack::*;
-use blas::*;
+
 use std::sync::Arc;
 
 pub struct NoiseField {
@@ -70,7 +70,7 @@ fn seek_to_list<T, F>(path_list:&[Box<&[u8]>],
                    reader:& mut Reader<&[u8]>,
                    parse_func:F)
                    -> Vec<T>
-where F:Fn(&mut Reader<&[u8]>) -> (T){
+where F:Fn(&mut Reader<&[u8]>) -> T{
     
     let mut index:usize = 0;
     let mut result:Vec<T> = Vec::new();
@@ -109,7 +109,7 @@ where F:Fn(&mut Reader<&[u8]>) -> (T){
                     }
                 }
             },
-            e => {},
+            _e => {},
         }
     }
     
@@ -148,7 +148,7 @@ impl NoiseField {
         };
     }
     /// Computes only the azimuth magnitude in the noise field
-    pub fn compute_azimuth_field(filebuffer:&str, shape:(usize, usize)) -> NoiseField {
+    pub fn compute_azimuth_field(filebuffer:&str, shape:(usize, usize)) -> Array2<f64> {
         let mut reader = Reader::from_str(filebuffer);
 
         //if two_eight_flag {
@@ -163,11 +163,9 @@ impl NoiseField {
         let mut azarr = NoiseField::interpolate_col(azimuth_result, shape);
 
 	// Normalize azarr
-	NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
+	//NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
 	
-        return NoiseField {
-            data:azarr
-        };
+	azarr
     }
 
     fn remove_azimuth_bias(mut arr:ArrayViewMut2<f64>, shape:(usize, usize)) {
@@ -934,7 +932,7 @@ impl TimeRowLut {
 	let n = x.len(); // number of equations
 	let k = 4; // degree of polynomial
 	let mut A = vec![0.0;(k+1)*(k+1)];
-	let mut b = vec![0.0;(k+1)];
+	let mut b = vec![0.0;k+1];
 
 	for i in 0..k+1 {
 	    b[i] = x.iter().zip(y.iter()).fold(0.0, |acc, s| acc+(s.0.powi(i as i32))*s.1);
@@ -1154,7 +1152,7 @@ impl BurstEntry {
 
 	// find the next closest row with matching column
 	let mut next_row = 9999999;
-	let mut next_ind = 9999999;
+
 	found = false;
 	    
 	for (e, xd) in time_row_lut.lut[swath].iter().enumerate() {
@@ -1162,7 +1160,7 @@ impl BurstEntry {
             if xd.row > cur_row {
 		if xd.row < next_row {
                     next_row = xd.row;
-		    next_ind = e;
+
 		    found = true;
 		}
 	    }
@@ -1451,7 +1449,7 @@ impl HyperParams {
 	    scs_normalize:1,
 	    scs_scale:1.0,
 	    scs_rho_x:1.0e-3,
-	    scs_max_iters : 1000,
+	    scs_max_iters : 5000,
 	    scs_eps : 1.0e-5 ,
 	    scs_cg_rate : 2.0 ,
 	    scs_verbose : 0

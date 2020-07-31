@@ -4,7 +4,7 @@ use crate::read_from_archive::SentinelFormatId;
 use crate::prep_lp::{ArrToArr, TwoDArray, MidPoint, };
 use ndarray::prelude::*;
 
-use ndarray::{ArrayViewMut2, ArrayView1, ArrayView2, Slice};
+use ndarray::{ArrayViewMut2, ArrayView1, ArrayView2};
 use ndarray::Zip;
 //use ndarray_parallel::prelude::*;
 use lapack::*;
@@ -54,22 +54,10 @@ macro_rules! get_look {
     }
 }
 
-/// Reduce mean along both axes
-fn reduce_mean(x:&TwoDArray,
-		fa:usize, la:usize, fr:usize, lr:usize) -> f64
-{
-    let mut total = 0.0;
-    for i in fa..la {
-	for j in fr..lr {
-	    total += x[(i,j)]/(((la-fa)*(lr-fr)) as f64);
-	}
-    }
-    return total;
-}
-
+/// Reduce mean along column axes
 fn reduce_col_mean(x:&TwoDArray,
 		fa:usize, la:usize, fr:usize, lr:usize) -> Vec<f64>  {
-    let mut total = vec![0.0;(la-fa)];
+    let mut total = vec![0.0;la-fa];
     for i in fa..la {
 	for j in fr..lr {
 	    total[i-fa] += x[(i,j)]/((lr-fr) as f64);
@@ -117,7 +105,7 @@ pub fn prep_measurement(x:ArrayView2<u16>, mut y:ArrayViewMut2<f64>) -> Array2<f
     Zip::from(&mut result)
         .and(x)
         //.par_apply(|a,b| *a = ((*b as f64) * (*b as f64)));
-	.apply(|a,b| *a = ((*b as f64) * (*b as f64)));
+	.apply(|a,b| *a = (*b as f64) * (*b as f64));
                
     return result;
 }
@@ -203,10 +191,11 @@ impl LpApply {
 			let n = (x - nex) as f64;
 			lin_params[i].b*(1.0-n/tot) +
 			    lin_params[i+1].b*n/tot});
-		p_ant[prev-fr..nex-fr].iter_mut()
-		    .zip(ant[prev-fr..nex-fr].iter()
+		p_ant[nex-fr..s_nex-fr].iter_mut()
+		    .zip(ant[nex-fr..s_nex-fr].iter()
 			 .zip(slope_prog.zip(int_prog)))
-		    .for_each(|x| *x.0 = ((x.1).1).1.exp() * (x.1).0.powf(((x.1).1).0));
+		.for_each(|x| *x.0 = ((x.1).1).1.exp() * (x.1).0.powf(((x.1).1).0));
+		//.for_each(|x| *x.0 = lin_params[i].b.exp() * (x.1).0.powf(lin_params[i].m));
 	    }
 	}
 	/* Interpolate to lr if appropriate*/
@@ -276,9 +265,10 @@ impl LpApply {
 	    apply_subtract(fa, b_fa, fr, lr);
 	    // Apply azimuth noise to the p_ant.
 	}
+
 	
 	// Last subswath.
-	if cur_burst == num_burst-1 && swath_bounds_[swath].last().unwrap().fa > b_fa{
+	if cur_burst == num_burst-1 && swath_bounds_[swath].last().unwrap().fa >= b_la{
 	    let (fa, la, fr, lr_) = unpack_bound!(swath_bounds_[swath].last().unwrap());
 	    let lr = lr_ + 1;
 	    apply_subtract(fa, la, fr, lr);
@@ -298,6 +288,8 @@ impl LpApply {
 	    let p_ant = apply_subtract(s_fa, s_la, fr, lr);
 	    
 	    // Check missing row
+
+	    
 	    if cur_burst == num_burst-1 && la > b_la { // TODOThis literally doesn't make sense
 		/* appply */
 		LpApply::subtract_along_burst(unsafe{Arc::get_mut_unchecked(x_m)},
@@ -333,7 +325,16 @@ impl LpApply {
     {
 	let num_subswaths:usize = get_num_subswath!(id);
 
-	
+	fn ensure_sorted(burst_coords:&Vec<Vec<Arc<BurstEntry>>>) {
+	    for i in 0..burst_coords.len() {
+		let mut prev = 0;
+		for j in 0..burst_coords[i].len() {
+		    if burst_coords[i][j].fa < prev {panic!("Burst coords out of order");}
+		    prev = burst_coords[i][j].fa;
+		}
+	    }
+	}
+	ensure_sorted(burst_coords);
 	match split_indices {
 	    MidPoint::Est(_) => {
 		panic!("Wrong Midpoint. Test segments needed");

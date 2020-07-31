@@ -10,7 +10,7 @@ pub mod parse;
 
 pub mod apply;
 pub mod read_from_archive;
-pub mod interface;
+pub mod py_interface;
 #[macro_use]
 pub mod prep_lp;
 pub mod est_lp;

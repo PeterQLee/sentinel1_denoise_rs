@@ -1,12 +1,12 @@
-use crate::parse::{NoiseField, SwathElem};
+use crate::parse::{SwathElem};
 use crate::read_from_archive::{get_data_from_zip_path, SentinelArchiveOutput};
 use crate::apply::{apply_swath_scale, prep_measurement, restore_scale, convert_to_f64_f32, convert_to_u16_f32};
 use crate::estimate::*;
 extern crate libc;
-use ndarray::{Array1, Array2, arr1};
+use ndarray::{Array2, arr1};
 use std::ptr;
 use numpy::{PyArray, PyArray1, PyArray2};
-use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyErr};
+use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python};
 use pyo3::wrap_pyfunction;
 use pyo3::exceptions;
 //extern crate openblas_src;
@@ -33,9 +33,9 @@ pub extern fn denoise_zip(path:*const u8, pathlen:libc::c_int) -> OutArr{
 
     
     match zipval {
-        Some(archout) => {
+        Ok(archout) => {
             match archout {
-                SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
                     let mut x_:Option<Array2<f64>> = None;
                     {
                         let mut y = noisefield.data.view_mut();
@@ -79,8 +79,8 @@ pub extern fn denoise_zip(path:*const u8, pathlen:libc::c_int) -> OutArr{
                                      rows:0, cols:0};}
             }
         },
-        None => {
-            println!("File parsed incorrectly");
+        Err(e) => {
+            println!("File parsed incorrectly: {}",e);
             return OutArr{crosspol:ptr::null::<libc::c_float>() as *mut libc::c_float,
                           copol:ptr::null::<libc::c_float>() as *mut libc::c_float,
                           rows:0, cols:0};
@@ -89,21 +89,36 @@ pub extern fn denoise_zip(path:*const u8, pathlen:libc::c_int) -> OutArr{
 }
 
 
-
+/// Noise floor removal engine for Sentinel-1
+/// Two types of noise removal methods are available.
+/// Note that the engine currently only removes noise floor from cross-pol images.
+///
+/// 1. A linear noise floor removal method that rescales the ESA provided noise floor
+///    that is provided in each Sentinel-1 product. This is the application of the method in
+///    P.Q. Lee, L. Xu, D.A. Clausi. 2020. Sentinel-1 additive noise removal from cross-polarization extra-wide TOPSAR with dynamic least-squares. https://doi.org/10.1016/j.rse.2020.111982
+///    Currently only available in GRD EW mode images.
+///    These methods are prefaced by linear_[...]
+///
+/// 2. A non-linear noise floor removal method that computes the noise floor as a power function of
+///    the antenna pattern. Parameters are estimated with linear programming. This is the application
+///    of the method in [].
+///    Can be applied to both EW and IW GRD mode images.
+///    These methods are prefaced by lp_[...]
 #[pymodule]
 fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
-    ///Get crosspol and copol
+    /// Applies the lstsquares estimation method to retrieve scaling parameters, k
+    /// and 
     #[pyfn(m, "get_dualpol_data")]
-    fn get_dualpol_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
+    fn linear_get_dualpol_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
         let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
         let lambda2_ = 1.0;
         let mu = 1.7899;
         let gamma = 2.0;
         let zipval = get_data_from_zip_path(zippath, true);
         match zipval {
-            Some(archout) => {
+            Ok(archout) => {
                 match archout {
-                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
                         let mut x_:Option<Array2<f64>> = None;
                         {
                             let mut y = noisefield.data.view_mut();
@@ -131,7 +146,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                 }
                 
             },
-            _ => {}
+            Err(e) => {println!("{}",e);}
         }
 
         return exceptions::ValueError.into();
@@ -147,9 +162,9 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
         let gamma = 2.0;
         let zipval = get_data_from_zip_path(zippath, true);
         match zipval {
-            Some(archout) => {
+            Ok(archout) => {
                 match archout {
-                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
                         let mut x_:Option<Array2<f64>> = None;
                         {
                             let mut y = noisefield.data.view_mut();
@@ -178,7 +193,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                 }
                 
             },
-            _ => {}
+           Err(e) => {println!("{}",e);}
         }
 
         return exceptions::ValueError.into();
@@ -193,9 +208,9 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
         let gamma = 2.0;
         let zipval = get_data_from_zip_path(zippath, true);
         match zipval {
-            Some(archout) => {
+            Ok(archout) => {
                 match archout {
-                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
                         
                         let mut y = noisefield.data.view_mut();
 
@@ -208,7 +223,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                 }
                 
             },
-            _ => {}
+            Err(e) => {println!("{}",e);}
         }
 
         return exceptions::ValueError.into();
@@ -224,9 +239,9 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
         let gamma = 2.0;
         let zipval = get_data_from_zip_path(zippath, true);
         match zipval {
-            Some(archout) => {
+            Ok(archout) => {
                 match archout {
-                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
                         
                         let mut x_:Option<Array2<f64>> = None;
                         {
@@ -245,7 +260,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                 }
                 
             },
-            _ => {}
+            Err(e) => {println!("{}",e);}
         }
 
         return exceptions::ValueError.into();
@@ -261,10 +276,10 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
         let gamma = 2.0;
         let zipval = get_data_from_zip_path(zippath, true);
         match zipval {
-            Some(archout) => {
+            Ok(archout) => {
                 match archout {
-                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16) => {                 
-                        let mut y = noisefield.data.view_mut();
+                    SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {                 
+                        let y = noisefield.data.view_mut();
                         
                         let py_cross = PyArray::from_array(__py,&x16).to_owned();
                         let py_co = PyArray::from_array(__py,&co16).to_owned();
@@ -277,7 +292,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
                 }
                 
             },
-            _ => {}
+            Err(e) => {println!("{}",e);}
         }
 
         return exceptions::ValueError.into();

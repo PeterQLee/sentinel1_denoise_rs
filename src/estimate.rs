@@ -1,14 +1,13 @@
 
 use crate::parse::SwathElem;
-use quick_xml::Reader;
-use quick_xml::events::Event;
-use std::str;
+
+
 use ndarray::prelude::*;
-use ndarray::{Array, Array1, Array2, ArrayBase, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2, Slice};
+use ndarray::{Array1, Array2, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2};
 //use ndarray_linalg::Solve;
 //use ndarray_parallel::prelude::*;
 use ndarray::Zip;
-use rayon::prelude::*;
+
 
 // Linear algebra
 use lapack::*;
@@ -485,7 +484,7 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
         for i in 0..swath_bounds[a].len() {
             let swth = &swath_bounds[a][i];
             // Find the mins and max
-            let mut n = 0;
+            let n = 0;
             let vy_ = mean_ax0(y.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1)/NORM;
             
             //np.mean(y[fa:la+1, fr:lr+1], axis = 0);

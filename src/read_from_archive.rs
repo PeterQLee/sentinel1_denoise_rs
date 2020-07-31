@@ -1,6 +1,7 @@
 /// Module for reading from sentinel-1 zip archive.
-use crate::parse::{NoiseField, SwathElem};
-use zip::read::{ZipArchive};
+use crate::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern};
+use crate::prep_lp::{ArrToArr, MidPoint, get_interpolation_pattern, TwoDArray};
+use zip::read::{ZipArchive, ZipFile};
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::fs::File;
@@ -8,7 +9,7 @@ use regex::Regex;
 use std::string::String;
 use tiff::decoder::{Decoder, DecodingResult, Limits};
 use ndarray::{Array,Array2};
-
+use std::sync::{Arc};
 
 #[derive(Debug)]
 pub struct SentinelFormatId {
@@ -21,19 +22,32 @@ pub struct SentinelFormatId {
     lower_dateid:String
 }
 
+pub struct LpAttributes {
+    pub bt:Vec<Vec<Arc<BurstEntry>>>, // burst entries
+    pub mp_dict:Vec<Vec<ArrToArr>>,
+    pub split_indices:MidPoint,
+    pub eval_mp_dict:Vec<Vec<ArrToArr>>,
+    pub eval_split_indices:MidPoint,
+    pub id:SentinelFormatId,
+    pub az_noise:Arc<TwoDArray>
+    
+}
+
 pub enum SentinelArchiveOutput{
     CrossPolOutput (
         Vec<Vec<SwathElem>>,
         Vec<usize>,
         NoiseField,
-        Array2<u16>
+        Array2<u16>,
+	LpAttributes,
     ),
     BothPolOutput (
         Vec<Vec<SwathElem>>,
         Vec<usize>,
         NoiseField,
         Array2<u16>,
-        Array2<u16>
+        Array2<u16>,
+	LpAttributes,
     )
 }
 
@@ -160,205 +174,239 @@ pub fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
     }
 }
 
-/// Gets the original 16-bit image and noise field from a given path.
-pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Option<SentinelArchiveOutput> {
-    let file_h = File::open(path);
 
-    match file_h {
-        Ok(f) => {
-            let mut ziparch = ZipArchive::new(f).unwrap();
-
-            let mut sentid: Option<SentinelFormatId> = None;
-            // TODO: find ids and stuff
-            for i in 0..ziparch.len() {
-                let filename = ziparch.by_index(i).unwrap();
-
-                match get_id_prefix(filename.name()) {
-                    Some(id_result) => {
-                        sentid = Some(id_result);
-                        break;
-                    },
-                    None => {}
-                }
-            }
-
-            match sentid {
-                Some(id) => {
-                    // generate the matching xml files for the calibration files we want.
-
-                    let crosspol_anno = id.create_crosspol_annotation();
-                    let crosspol_noise = id.create_crosspol_noise();
-                    let crosspol_measurement = id.create_crosspol_measurement();
-                    let copol_measurement = id.create_copol_measurement();
-
-
-                    let mut swath_bounds:Option<Vec<Vec<SwathElem>>> = None;
-                    let mut w:Option<Vec<usize>> = None;
-                    let mut noisefield:Option<NoiseField> = None;
-                    let mut measurement_array:Option<Array2<u16>> = None;
-                    let mut copol_array:Option<Array2<u16>> = None;
-
-                    let mut shape_o:Option<(usize, usize)> = None;
-
-                    // Measurement files first, so we can get the required shape info
-                    for i in 0..ziparch.len() {
-                        let mut file = ziparch.by_index(i).unwrap();
-                        // Get crosspol array from tiff file.
-                        if file.name() == crosspol_measurement {
-                            let mut buffer = Vec::new();
-                            let xmldata = file.read_to_end(&mut buffer);
-                            let virt_file = Cursor::new(buffer);
-                            let mut tiff_file = Decoder::new(virt_file).unwrap();
-                            let mut limits = Limits::default();
-                            limits.decoding_buffer_size = 1_usize<<40;
-                            limits.ifd_value_size = 1_usize<<40;
-                            tiff_file = tiff_file.with_limits(limits);
-
-
-                            let tiff_dims = tiff_file.dimensions();
-                            let (x,y):(u32,u32);
-                            match tiff_dims {
-                                Ok(t) => {x = t.0; y = t.1;}
-                                Err(e) => {
-                                    println!("The tiff file is not encoded properly (dimensions)");
-                                    println!("{}", e);
-                                    return None;
-                                }
-                            }
-                            shape_o = Some((y as usize, x as usize));
-                            
-                            let tiff_result = tiff_file.read_image();
-                            match tiff_result {
-                                Ok(dec_result) => {
-                                    if let DecodingResult::U16(dvec) = dec_result {
-                                        measurement_array = Some(Array::from_shape_vec((y as usize,x as usize), dvec).unwrap());
-                                    }
-                                    else {
-                                        println!("The tiff file is not encoded properly (Bitdepth)."); return None;
-                                    }
-                                },
-                                Err(e) => {
-                                    println!("The tiff file is not encoded properly (readimg)");
-                                    println!("{}", e);
-                                    return None;
-                                }
-                            }
-                        }
-
-                        // Get crosspol array from tiff file.
-                        if bothpol_flag && file.name() == copol_measurement {
-                            let mut buffer = Vec::new();
-                            let xmldata = file.read_to_end(&mut buffer);
-                            let virt_file = Cursor::new(buffer);
-                            let mut tiff_file = Decoder::new(virt_file).unwrap();
-                            let mut limits = Limits::default();
-                            limits.decoding_buffer_size = 1_usize<<40;
-                            limits.ifd_value_size = 1_usize<<40;
-                            tiff_file = tiff_file.with_limits(limits);
-
-                            let tiff_dims = tiff_file.dimensions();
-                            let (x,y):(u32,u32);
-                            match tiff_dims {
-                                Ok(t) => {x = t.0; y = t.1;}
-                                Err(e) => {
-                                    println!("The tiff file is not encoded properly (dimensions)");
-                                    println!("{}", e);
-                                    return None;
-                                }
-                            }
-                            
-                            
-                            let tiff_result = tiff_file.read_image();
-                            match tiff_result {
-                                Ok(dec_result) => {
-                                    if let DecodingResult::U16(dvec) = dec_result {
-                                        copol_array = Some(Array::from_shape_vec((y as usize,x as usize), dvec).unwrap());
-                                    }
-                                    else {
-                                        println!("The tiff file is not encoded properly (Bitdepth)."); return None;
-                                    }
-                                },
-                                Err(e) => {
-                                    println!("The tiff file is not encoded properly");
-                                    println!("{}", e);
-                                    return None;
-                                }
-                            }
-                        }
-                    }
-
-                    let shape = shape_o.unwrap();
-                    
-                    for i in 0..ziparch.len() {
-                        let mut file = ziparch.by_index(i).unwrap();
-
-
-                        // Get swath bounds and period from anno file
-                        if file.name() == crosspol_anno {
-                            let mut buffer = String::new();
-                            let xmldata = file.read_to_string(&mut buffer).unwrap();
-                            let k = SwathElem::new(&buffer, &id);
-                            swath_bounds = Some(k.0);
-                            w = Some(k.1);
-                            
-                        }
-
-                        // Get noise from noise calibration file.
-                        else if file.name() == crosspol_noise {
-                            let mut buffer = String::new();
-                            let xmldata = file.read_to_string(&mut buffer).unwrap();
-                            noisefield = Some(NoiseField::new(&buffer, shape, true));
-                            
-                        }
-
-                    }
-
-                    // Return the crosspol result only.
-                    if !bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() {
-                        return Some(
-                            SentinelArchiveOutput::CrossPolOutput (
-                                swath_bounds.unwrap(),
-                                w.unwrap(),
-                                noisefield.unwrap(),
-                                measurement_array.unwrap()
-                            )
-                        );
-                        //return Some((swath_bounds.unwrap(), w.unwrap(), noisefield.unwrap(), measurement_array.unwrap()));
-                    }
-
-
-                    // Both crosspol and co polarization
-                    else if bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() && copol_array.is_some() {
-                        return Some(
-                            SentinelArchiveOutput::BothPolOutput (
-                                swath_bounds.unwrap(),
-                                w.unwrap(),
-                                noisefield.unwrap(),
-                                measurement_array.unwrap(),
-                                copol_array.unwrap()
-                            )
-                        );
-
-                    
-                    }
-
-                    println!("One or more files not found");
-                    return None;
-                }
-                
-                None => {
-                    println!("The given zip archive is not formatted as Sentinel-1 archive");
-                    return None;
-                }
-                    
-            }
-            
+fn find_format_id(ziparch:&mut ZipArchive<File>) -> Result<SentinelFormatId, String>  {
+    for i in 0..ziparch.len() {
+        let filename = ziparch.by_index(i).unwrap();
+	
+        match get_id_prefix(filename.name()) {
+            Some(id_result) => {
+                return Ok(id_result);
+            },
+            None => {}
         }
-        Err(_e) => {
-            println!("Cannot open zipfile {}", path);
-            return None;
+    }
+    Err("Error: The given zip/directory archive is not formatted as Sentinel-1 archive".into())
+
+}
+
+fn decode_tiff(file:&mut ZipFile) -> Result<(Array2<u16>, (usize, usize)), String> {
+    let mut buffer = Vec::new();
+    let _xmldata = file.read_to_end(&mut buffer);
+    let virt_file = Cursor::new(buffer);
+    let mut tiff_file = Decoder::new(virt_file).unwrap();
+    let mut limits = Limits::default();
+    limits.decoding_buffer_size = 1_usize<<40;
+    limits.ifd_value_size = 1_usize<<40;
+    tiff_file = tiff_file.with_limits(limits);
+
+    let tiff_dims = tiff_file.dimensions();
+    let (x,y):(u32,u32);
+    match tiff_dims {
+        Ok(t) => {x = t.0; y = t.1;}
+        Err(e) => {
+            return Err(format!("The tiff file is not encoded properly (dimensions) {}", e));
+        }
+    }
+    let shape_o = (y as usize, x as usize);
+                            
+    let tiff_result = tiff_file.read_image();
+    match tiff_result {
+        Ok(dec_result) => {
+            if let DecodingResult::U16(dvec) = dec_result {
+                return Ok((Array::from_shape_vec((y as usize,x as usize), dvec).unwrap(),
+					shape_o));
+            }
+            else {
+                return Err("The tiff file is not encoded properly (Bitdepth).".into());
+            }
+        },
+        Err(e) => {
+	    
+            return Err(format!("The tiff file is not encoded properly (readimg) {}",e));
         }
     }
 }
 
+
+fn create_lpargs(file:&mut ZipFile,
+		 id: SentinelFormatId,
+		 swath_bounds:&mut Option<Vec<Vec<SwathElem>>>,
+		 w:&mut Option<Vec<usize>>,
+		 lp_args:&mut Option<LpAttributes>,
+		 az_noise:Array2<f64>
+)  {
+    let mut buffer = String::new();
+    /* Get swathbound regions */
+    let _xmldata = file.read_to_string(&mut buffer).unwrap();
+    let k = SwathElem::new(&buffer, &id);
+
+
+    // Get lookup table information
+    let rawpatt = RawPattern::new(&buffer, &id);
+    let lut = TimeRowLut::new(&buffer, &k.0, &id);
+    let bt = BurstEntry::create_burst_coords(&buffer, //return
+					     &lut,
+					     &k.0,
+							     &id);
+    // get antenna pattern functions
+    let (mp_dict, split_indices) = get_interpolation_pattern(&buffer, //return
+							     &bt,
+									     &lut,
+							     &rawpatt,
+							     &id,
+							     false
+    );
+    
+    let (r_mp_dict, r_split_indices) = get_interpolation_pattern(&buffer, //return
+								 &bt,
+								 &lut,
+								 &rawpatt,
+								 &id,
+								 true
+    );
+    *swath_bounds = Some(k.0);
+    *w = Some(k.1);
+    
+    *lp_args = Some(LpAttributes{bt:bt,
+				 mp_dict:mp_dict,
+				 split_indices:split_indices,
+				 eval_mp_dict:r_mp_dict,
+				 eval_split_indices:r_split_indices,
+				 id:id,
+				 az_noise:Arc::new(TwoDArray::from_ndarray(az_noise))
+    });
+  
+}
+
+/// Gets the original 16-bit image and noise field from a given path.
+pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Result<SentinelArchiveOutput, String> {
+    let file_h = File::open(path);
+
+    match file_h {
+        Ok(f) => {
+            let mut ziparch:ZipArchive<File> = ZipArchive::new(f).unwrap();
+
+            let id: SentinelFormatId = find_format_id(&mut ziparch)?;
+
+            // generate the matching xml files for the calibration files we want.
+	    
+            let crosspol_anno = id.create_crosspol_annotation();
+            let crosspol_noise = id.create_crosspol_noise();
+            let crosspol_measurement = id.create_crosspol_measurement();
+            let copol_measurement = id.create_copol_measurement();
+	    
+
+            let mut swath_bounds:Option<Vec<Vec<SwathElem>>> = None;
+            let mut w:Option<Vec<usize>> = None;
+            let mut noisefield:Option<NoiseField> = None;
+            let mut measurement_array:Option<Array2<u16>> = None;
+            let mut copol_array:Option<Array2<u16>> = None;
+	    
+            let mut shape_o:Option<(usize, usize)> = None;
+	    
+            // Measurement files first, so we can get the required shape info
+            for i in 0..ziparch.len() {
+                let mut file = ziparch.by_index(i).unwrap();
+                // Get crosspol array from tiff file.
+                if file.name() == crosspol_measurement {
+		    let tmp = decode_tiff(&mut file)?;
+		    measurement_array = Some(tmp.0);
+		    shape_o =  Some(tmp.1);
+                }
+
+                // Get crosspol array from tiff file.
+                if bothpol_flag && file.name() == copol_measurement {
+		    let tmp = decode_tiff(&mut file)?;
+		    copol_array = Some(tmp.0);
+		    shape_o = Some(tmp.1);
+                }
+            }
+
+            let shape = shape_o.unwrap();
+
+
+	    // Parse nosiefield
+	    let mut az_noise:Option<Array2<f64>> = None;
+	    for i in 0..ziparch.len() {
+		let mut file = ziparch.by_index(i).unwrap();
+                // Get noise from noise calibration file.
+                if file.name() == crosspol_noise {
+                    let mut buffer = String::new();
+		    let _xmldata = file.read_to_string(&mut buffer).unwrap();
+                    noisefield = Some(NoiseField::new(&buffer, shape, true));
+
+		    //TODO: make this optional.
+		    az_noise = Some(NoiseField::compute_azimuth_field(&buffer, shape));
+                    
+                }
+		
+            }
+
+
+	    // Parse AZ noise
+	    let mut lp_args:Option<LpAttributes> = None;
+	    
+            for i in 0..ziparch.len() {
+                let mut file = ziparch.by_index(i).unwrap();
+		
+		
+                // Get swath bounds and period from anno file
+                if file.name() == crosspol_anno {
+		    create_lpargs(&mut file,
+				  id,
+				  &mut swath_bounds,
+				  &mut w,
+				  &mut lp_args,
+				  az_noise.unwrap()
+		    );
+		    break;
+                }
+	    }
+
+
+	
+            // Return the crosspol result only.
+            if !bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() {
+                return Ok(
+                    SentinelArchiveOutput::CrossPolOutput (
+                        swath_bounds.unwrap(),
+                        w.unwrap(),
+                        noisefield.unwrap(),
+                        measurement_array.unwrap(),
+			lp_args.unwrap(),
+                    )
+                );
+            }
+
+
+            // Both crosspol and co polarization
+            else if bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() && copol_array.is_some() {
+                return Ok(
+                    SentinelArchiveOutput::BothPolOutput (
+                        swath_bounds.unwrap(),
+                        w.unwrap(),
+                        noisefield.unwrap(),
+                        measurement_array.unwrap(),
+                        copol_array.unwrap(),
+			lp_args.unwrap(),
+                    )
+                );
+		
+                    
+            }
+	    //TODO: be specific about files not being found.
+            return Err("One or more files not found".into());
+
+        },
+	
+                    
+    
+	Err(_e) => {
+	    let v = format!("Cannot open zipfile {}", path);
+            return Err(v);
+	    //	    return Err("Cannot open zipfile {}");
+	}
+    }
+}
 
