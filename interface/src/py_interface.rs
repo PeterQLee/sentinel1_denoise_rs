@@ -207,7 +207,16 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 		return exceptions::ValueError.into();
 	    }
 	}
+			   }
+    /// Applies custom scaling based on provided lp parameters.
+    fn lp_get_customscale_data<'p>(__py:Python<'p>, zippath:&str, lstsq_rescale:bool)
+			   // -> PyResult<(Py<PyArray2<f64>>,
+			   // 		Py<PyArray2<u16>>,
+			   // 		&'p PyList,
+			   // 		&'p PyList
+    {
     }
+
 
     m.add_wrapped(wrap_pyfunction!(linear_get_dualpol_data))?;
     m.add_wrapped(wrap_pyfunction!(linear_get_customscale_data))?;

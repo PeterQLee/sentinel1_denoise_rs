@@ -80,10 +80,8 @@ pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
                          swath_bounds:&[&[SwathElem]]
 ) {
 
-    //Zip::from(&mut x)
-    //    .apply(|x_| {*x_ = (*x_) * (*x_);});
 
-    for a in 0..NUM_SUBSWATHS {
+    for a in 0..swath_bounds.len() {
         let ks = k[a];
         for swth in swath_bounds[a].iter() {
             // apply the swath scaling
