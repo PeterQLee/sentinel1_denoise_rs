@@ -459,7 +459,7 @@ fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, 
     for (e,x) in filt_sl.iter().enumerate() {
 	if *x != 0.0 { mx = e; mxfound = true; }
     }
-    if !mnfound  || !mxfound { mn = 0; mx = 50}
+    if !mnfound  || !mxfound || (mn + 25 > mx - 25) { mn = 0; mx = 50}
 
     filt_sl = filt_sl[mn+25..mx-25].to_vec();
 

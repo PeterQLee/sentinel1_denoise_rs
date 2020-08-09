@@ -12,7 +12,7 @@ use blas::*;
 
 use std::sync::Arc;
 use std::thread;
-const NUM_SUBSWATHS:usize = 5;
+
 
 macro_rules! get_num_subswath {
     ($sw:expr) => {
