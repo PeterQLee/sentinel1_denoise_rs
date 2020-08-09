@@ -83,7 +83,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
         SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, lpargs) => {
             
             let y_ = noisefield.data.view_mut();
-            let mv = prep_measurement(x16.view(), y_);
+            let mut mv = prep_measurement(x16.view(), y_);
 	    
             let mut x = mv.clone();
 	    
@@ -98,9 +98,9 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 		"IW" => arr1(&[1.0,1.0,1.0]),
 		_ => { return Err("Invalid sentinel sensor mode".into()); }
 	    };
-	    
+
             // TODO: need to test this for IW mode
-            apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
+            apply_swath_scale(mv.view_mut(), noisefield.data.view(), k.view(), &sb);
 	    
 	    
 	    let base_v = Arc::new(TwoDArray::from_ndarray(mv));
@@ -113,7 +113,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 	    let mino_list:Vec<Vec<f64>> = compute_mino_list(
 		base_v.clone(),
 		&lpargs.bt,
-			    hyper.clone(),
+		hyper.clone(),
 		&lpargs.id);
 	    
 
@@ -161,4 +161,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
         _ => {}
     }
     return Err("Error parsing archive".into());
+}
+
+pub fn lp_get_customscale_data() {
 }

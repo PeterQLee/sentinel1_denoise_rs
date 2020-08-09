@@ -1,0 +1,31 @@
+[package]
+name = "s1-interface"
+version = "0.1.0"
+authors = ["PeterQLee <leep1995@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+numpy = "0.7.0"
+s1-noisefloor-engine = {path = "../engine"}
+libc = "*"
+hdf5 = "0.6.1"
+
+
+[dependencies.pyo3]
+version = "0.8"
+features = ["extension-module"]
+
+[build-dependencies]
+pkg-config = "0.3.16"
+
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+name = "s1_noisefloor"
+path = "src/lib.rs"
+
+# [[bin]]
+# name = "denoise_s1"
+# path= "src/cli.rs"

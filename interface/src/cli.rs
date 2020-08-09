@@ -1,8 +1,8 @@
-extern crate denoise_engine;
-use denoise_engine::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern, HyperParams};
-use denoise_engine::prep_lp::*;
-use denoise_engine::read_from_archive::{SentinelFormatId,get_data_from_zip_path,  get_id_prefix, SentinelArchiveOutput};
-use denoise_engine::apply::{apply_swath_scale, prep_measurement, LpApply};
+extern crate s1_noisefloor_engine;
+use s1_noisefloor_engine::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern, HyperParams};
+use s1_noisefloor_engine::prep_lp::*;
+use s1_noisefloor_engine::read_from_archive::{SentinelFormatId,get_data_from_zip_path,  get_id_prefix, SentinelArchiveOutput};
+use s1_noisefloor_engine::apply::{apply_swath_scale, prep_measurement, LpApply};
 use hdf5;
 use hdf5::types::Array;
 

@@ -1,14 +1,14 @@
 
-use crate::parse::{SwathElem,  HyperParams, LinearConfig};
-use crate::interface;
-extern crate libc;
+use s1_noisefloor_engine::parse::{SwathElem,  HyperParams, LinearConfig};
+use s1_noisefloor_engine::interface;
+
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python};
 use pyo3::{wrap_pyfunction, exceptions};
 use pyo3::types::PyList;
 
 use std::sync::Arc;
-extern crate lapack_src;
+//extern crate lapack_src;
 
 
 /// Noise floor removal engine for Sentinel-1
@@ -17,7 +17,7 @@ extern crate lapack_src;
 ///
 /// 1. A linear noise floor removal method that rescales the ESA provided noise floor
 ///    that is provided in each Sentinel-1 product. This is the application of the method in
-///    P.Q. Lee, L. Xu, D.A. Clausi. 2020. Sentinel-1 additive noise removal from cross-polarization extra-wide TOPSAR with dynamic least-squares. Remote Sensing of Environment. 248. https://doi.org/10.1016/j.rse.2020.111982
+///    P. Q. Lee, L. Xu, D. A. Clausi. 2020. Sentinel-1 additive noise removal from cross-polarization extra-wide TOPSAR with dynamic least-squares. Remote Sensing of Environment. 248. https://doi.org/10.1016/j.rse.2020.111982
 ///    Currently only available in GRD EW mode images.
 ///    These methods are prefaced by linear_[...].
 ///
@@ -34,10 +34,11 @@ extern crate lapack_src;
 /// To accomodate this, we provide postprocessing methods to handle this aspect
 /// with the methods prefaced by post_[...].
 #[pymodule]
-fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
+fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// Applies the lstsquares estimation method to retrieve scaling parameters, k,
     /// rescales the noise floor, y, and subtracts it from the image, x.
     /// Returns the values back in square intensity units.
+    ///
     /// Parameters:
     ///
     /// zippath: str
@@ -150,6 +151,7 @@ fn denoise_engine(_py: Python, m:&PyModule) -> PyResult<()> {
     /// Applies the linear programming method to restimate a noise floor based
     /// on the characteristics of the original image and the 
     /// Returns the values back in square intensity units.
+    ///
     /// Parameters:
     ///
     /// zippath: str

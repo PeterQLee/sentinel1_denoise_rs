@@ -13,7 +13,7 @@ fn main() {
 	.current_dir(&Path::new("src/c_solve/"))
 	.status().unwrap();
 
-    println!("cargo:rustc-link-search=native=/home/peter/SAR/w_sentinel1_denoise_rs/src/c_solve/");
+    println!("cargo:rustc-link-search=native=/home/peter/SAR/w_sentinel1_denoise_rs/engine/src/c_solve/");
     println!("cargo:rustc-link-lib=static=lp_solve");
     println!("cargo:rustc-link-search=native=/usr/local/lib/");
     println!("cargo:rustc-link-lib=static=scsdir");
