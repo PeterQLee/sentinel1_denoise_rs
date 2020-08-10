@@ -129,7 +129,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 		&lpargs.bt,
 		hyper.clone(),
 		&lpargs.id);
-	    
+	    println!("prestimate segments");
 	    let params = select_and_estimate_segments(xv.clone(),
 			    			      lpargs.mp_dict,
 			    			      &lpargs.bt,
