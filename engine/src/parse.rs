@@ -1464,6 +1464,7 @@ impl HyperParams {
 	let buf_h = read_to_string(path_to_cfg);
 	match buf_h {
 	    Ok(buf) => {
+		config.read(buf)?;
 		let mut hp = HyperParams {
 		    box_l:51,
 		    add_pad:0,
@@ -1503,7 +1504,7 @@ impl HyperParams {
 		hp.scs_verbose = valid_hp(config.getuint("hyperparams", "scs_verbose")?, "scs_verbose")? as u32;
 		return Ok(hp);
 	    },
-	    Err(e) => {
+	    Err(_e) => {
 		let v = format!("Cannot open config file: {}", path_to_cfg);
 		return Err(v);
 	    }
@@ -1540,11 +1541,47 @@ impl LinearConfig {
     }
     pub fn parse_config(path_to_cfg:&str) -> Result<LinearConfig, String>
     {
-	Ok(LinearConfig {
-	    mu:1.7899,
-	    gamma:2.0,
-	    lambda:[0.1,0.1,6.75124,2.78253,10.0].into(),
-	    lambda2:1.0
-	})
+	let mut config = Ini::new();
+	let buf_h = read_to_string(path_to_cfg);
+	match buf_h {
+	    Ok(buf) => {
+		config.read(buf)?;
+		let mut lc = LinearConfig {
+		    mu:1.7899,
+		    gamma:2.0,
+		    lambda:[0.1,0.1,6.75124,2.78253,10.0].into(),
+		    lambda2:1.0
+		};
+		fn valid_hp<T>(val:Option<T>, key:&str) -> Result<T, String> {
+		    match val {
+			Some(s) => Ok(s),
+			None => Err(format!("Could not find {}", key))
+		    }
+		}
+		fn parse_li(a:String) -> Result<[f64;5], String> {
+		    let mut buf = [0.0;5];
+		    let mut it = a.split(',');
+		    for i in 0..5 {
+			let v = it.next();
+			if v.is_none() { return Err(format!("Error parsing argument {} over lambda config",i));}
+			let w:Result<f64,_> = v.unwrap().parse();
+			if !w.is_ok() { return Err(format!("Error parsing argument {} over lambda config",i));}
+			buf[i] = w.unwrap();
+		    }
+		    Ok(buf)
+		    
+		}
+		lc.mu = valid_hp(config.getfloat("linearconfig", "mu")?, "mu")?;
+		lc.gamma = valid_hp(config.getfloat("linearconfig", "gamma")?, "gamma")?;
+		lc.lambda = parse_li(valid_hp(config.get("linearconfig", "lambda"), "lambda")?)?;
+		lc.lambda2 = valid_hp(config.getfloat("linearconfig", "lambda2")?, "lambda2")?;
+
+		return Ok(lc);
+	    },
+	    Err(_e) => {
+		let v = format!("Cannot open config file: {}", path_to_cfg);
+		return Err(v);
+	    }
+	}
     }
 }
