@@ -19,13 +19,9 @@ pub fn multilook_and_floor(x:Arc<TwoDArray>, row_factor:usize, col_factor:usize,
     // Allocate output array.
     let output:Arc<TwoDArray> = Arc::new(TwoDArray::zeros(newrow, newcol));
 
-    // Note, some performance can probably be gained by making a checked and unchecked
-    // version for bounds. But time is limited, so will only implement checked bounds version
-    // For slight performance penality.
+
     let subsum = move |r:&Arc<TwoDArray>,i:usize,j:usize| -> f64 {
 	let mut total = 0.0;
-	//let a_end = (r.rows - i*row_factor).min(row_factor);
-	//let b_end = (r.cols - j*col_factor).min(col_factor);
 	let a_end = row_factor;
 	let b_end = col_factor;
 	let norm = 1.0/((a_end*b_end) as f64);

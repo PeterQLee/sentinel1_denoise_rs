@@ -188,20 +188,6 @@ impl NoiseField {
 	}
 	
     }
-    /*def remove_azimuth_bias(aznoise, mmask):
-
-    azmask = aznoise != 0
-
-    colsum = np.sum(aznoise, axis=0)
-    refsum = np.sum(azmask, axis=0) # N for each column. Ignore zeroed entries.
-
-    normfactor = refsum/colsum # Rescale so that we have removed the total bias of the azimuth noise.
-
-    unbias_aznoise = aznoise * normfactor[np.newaxis,:]
-    return unbias_aznoise*/
-    
-
-
 
     
     fn old_compute_field(rg_result:Vec<NoiseRangeEntry>) {
