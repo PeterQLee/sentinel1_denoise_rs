@@ -1,5 +1,5 @@
 
-use s1_noisefloor_engine::parse::{SwathElem,  HyperParams, LinearConfig};
+use s1_noisefloor_engine::parse::{LinearConfig};
 use s1_noisefloor_engine::interface;
 
 use numpy::{PyArray, PyArray1, PyArray2};

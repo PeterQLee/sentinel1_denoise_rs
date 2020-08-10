@@ -11,6 +11,9 @@ use ndarray::prelude::*;
 use rayon::prelude::*;
 
 use chrono::prelude::*;
+use configparser::ini::Ini;
+use std::fs::read_to_string;
+
 
 use std::collections::HashSet;
 
@@ -1456,7 +1459,55 @@ impl HyperParams {
 	}
     }
     /// Extract parameters from config file.
-    pub fn parse_config() {
+    pub fn parse_config(path_to_cfg:&str) -> Result<HyperParams, String>{
+	let mut config = Ini::new();
+	let buf_h = read_to_string(path_to_cfg);
+	match buf_h {
+	    Ok(buf) => {
+		let mut hp = HyperParams {
+		    box_l:51,
+		    add_pad:0,
+		    affine_lowpad:30,
+		    affine_highpad:10,
+		    affine_var_norm:10000000.0, //variable for normalizing variance calculation for offsets
+		    burst_padding:40,
+		    
+		    scs_normalize:1,
+		    scs_scale:1.0,
+		    scs_rho_x:1.0e-3,
+		    scs_max_iters : 5000,
+		    scs_eps : 1.0e-5 ,
+		    scs_cg_rate : 2.0 ,
+		    scs_verbose : 0
+			
+		};
+		fn valid_hp<T>(val:Option<T>, key:&str) -> Result<T, String> {
+		    match val {
+			Some(s) => Ok(s),
+			None => Err(format!("Could not find {}", key))
+		    }
+		}
+		    
+		hp.box_l = valid_hp(config.getint("hyperparams", "box_l")?, "box_l")? as usize;
+		hp.add_pad = valid_hp(config.getint("hyperparams", "add_pad")?, "add_pad")? as usize;
+		hp.affine_lowpad = valid_hp(config.getint("hyperparams", "affine_lowpad")?, "affine_lowpad")? as usize;
+		hp.affine_highpad = valid_hp(config.getint("hyperparams", "affine_highpad")?, "affine_highpad")? as usize;
+		hp.affine_var_norm = valid_hp(config.getfloat("hyperparams", "affine_var_norm")?, "affine_var_norm")?;
+
+		hp.scs_normalize = valid_hp(config.getuint("hyperparams", "scs_normalize")?, "scs_normalize")? as u32;
+		hp.scs_scale = valid_hp(config.getfloat("hyperparams", "scs_scale")?, "scs_scale")? as f64;
+		hp.scs_rho_x = valid_hp(config.getfloat("hyperparams", "scs_rho_x")?, "scs_rho_x")? as f64;
+		hp.scs_max_iters = valid_hp(config.getuint("hyperparams", "scs_max_iters")?, "scs_max_iters")? as u32;
+		hp.scs_eps = valid_hp(config.getfloat("hyperparams", "scs_eps")?, "scs_eps")? as f64;
+		hp.scs_cg_rate = valid_hp(config.getfloat("hyperparams", "scs_cg_rate")?, "scs_cg_rate")? as f64;
+		hp.scs_verbose = valid_hp(config.getuint("hyperparams", "scs_verbose")?, "scs_verbose")? as u32;
+		return Ok(hp);
+	    },
+	    Err(e) => {
+		let v = format!("Cannot open config file: {}", path_to_cfg);
+		return Err(v);
+	    }
+	}
     }
 
     pub fn get_scs(&self) -> lp_scs_settings {
@@ -1486,5 +1537,14 @@ impl LinearConfig {
 	    lambda:[0.1,0.1,6.75124,2.78253,10.0].into(),
 	    lambda2:1.0
 	}
+    }
+    pub fn parse_config(path_to_cfg:&str) -> Result<LinearConfig, String>
+    {
+	Ok(LinearConfig {
+	    mu:1.7899,
+	    gamma:2.0,
+	    lambda:[0.1,0.1,6.75124,2.78253,10.0].into(),
+	    lambda2:1.0
+	})
     }
 }

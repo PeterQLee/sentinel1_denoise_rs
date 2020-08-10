@@ -490,7 +490,7 @@ fn process_segment(x:Arc<TwoDArray>, burst_coords:Arc<BurstEntry>, swath:usize, 
 	prev = nex + 2*hyper.add_pad;
 	nex = (split_index[i].round() as usize - fr) as usize - hyper.add_pad;
 	
-	let (real, ant) = get_seg(prev, nex, &filt_sl, &ant_vals, o_value);
+	let (real, ant) = get_seg(prev, nex.min(filt_sl.len()), &filt_sl, &ant_vals, o_value);
 	ln_real_list.push(real);
 	ln_ant_list.push(ant);
     }
