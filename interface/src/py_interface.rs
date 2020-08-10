@@ -231,6 +231,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 		})
 	    }
 	    Err(_e) => {
+		println!("Error parsing config path. Using default");
 		(LinearConfig::default(), HyperParams::default())
 	    }
 	};
