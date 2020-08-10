@@ -1,6 +1,8 @@
 
 use s1_noisefloor_engine::parse::{LinearConfig};
 use s1_noisefloor_engine::interface;
+use s1_noisefloor_engine::postprocess;
+use s1_noisefloor_engine::prep_lp;
 
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python};
@@ -217,10 +219,40 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     {
     }
 
+    /// Applies multilooking to the input image, sets negative values to 0, and
+    /// square roots the output values.
+    ///
+    /// Parameters:
+    /// py_x: Input array for multilooking (square units)
+    /// row_factor: integer amount to mean reduce row by.
+    /// col_factor: integer amount to mean reduce col by.
+    /// num_cores: number of multithreading cores to use.
+    ///
+    /// Output:
+    /// x : multilooked image (linear units)
+    #[pyfn(m, "post_multilook_and_floor")]
+    fn post_multilook_and_floor(__py:Python, py_x:&PyArray2<f64>,
+				row_factor:u64,
+				col_factor:u64,
+				num_cores:u64) -> PyResult<Py<PyArray2<f64>>> {
+	let x = py_x.to_owned_array();
+	let xp = Arc::new(prep_lp::TwoDArray::from_ndarray(x));
+	let o = postprocess::multilook_and_floor(xp,
+						 row_factor as usize,
+						 col_factor as usize,
+						 num_cores as usize);
+	let op = o.to_ndarray();
+	let py_o = PyArray::from_array(__py, &op).to_owned();
+	Ok(py_o)
+	
+    }
+
 
     m.add_wrapped(wrap_pyfunction!(linear_get_dualpol_data))?;
     m.add_wrapped(wrap_pyfunction!(linear_get_customscale_data))?;
     m.add_wrapped(wrap_pyfunction!(linear_get_raw_data))?;
     m.add_wrapped(wrap_pyfunction!(lp_get_dualpol_data))?;
+
+    m.add_wrapped(wrap_pyfunction!(post_multilook_and_floor))?;
     Ok(())
 }

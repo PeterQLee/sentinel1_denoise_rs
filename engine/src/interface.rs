@@ -1,10 +1,8 @@
 use crate::read_from_archive::{get_data_from_zip_path, SentinelArchiveOutput};
-use crate::apply::{apply_swath_scale, prep_measurement, restore_scale, convert_to_f64_f32, convert_to_u16_f32, LpApply};
+use crate::apply::{apply_swath_scale, prep_measurement,  LpApply};
 use crate::parse::{SwathElem,  HyperParams, LinearConfig};
 use crate::estimate::*;
 use ndarray::{Array2, Array1, ArrayView1, arr1};
-use std::ptr;
-use numpy::{PyArray, PyArray1, PyArray2};
 use crate::est_lp;
 
 use std::sync::Arc;

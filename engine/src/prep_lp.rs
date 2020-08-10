@@ -39,6 +39,14 @@ impl IndexMut<(usize, usize)> for TwoDArray {
 }
 
 impl TwoDArray {
+    pub fn zeros(row:usize, col:usize) -> TwoDArray {
+	TwoDArray {
+	    rows:row,
+	    cols:col,
+	    data:vec![0.0;row*col]
+	}
+    }
+
     pub fn from_ndarray(ndarr:Array2<f64>) -> TwoDArray {
 	let row = ndarr.nrows();
 	let col = ndarr.ncols();
