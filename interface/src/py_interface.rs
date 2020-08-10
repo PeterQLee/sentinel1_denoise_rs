@@ -1,13 +1,14 @@
 
-use s1_noisefloor_engine::parse::{LinearConfig};
+use s1_noisefloor_engine::parse::{LinearConfig, HyperParams};
 use s1_noisefloor_engine::interface;
 use s1_noisefloor_engine::postprocess;
 use s1_noisefloor_engine::prep_lp;
 
+
 use numpy::{PyArray, PyArray1, PyArray2};
-use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python};
+use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyObject};
 use pyo3::{wrap_pyfunction, exceptions};
-use pyo3::types::PyList;
+use pyo3::types::{PyList, PyString, PyAny};
 
 use std::sync::Arc;
 //extern crate lapack_src;
@@ -59,8 +60,27 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// k: ndarray(1)
     ///    array of the estimated linear parameters
     #[pyfn(m, "linear_get_dualpol_data")]
-    fn linear_get_dualpol_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
-	match interface::linear_get_dualpol_data(zippath, &LinearConfig::default()) {
+    fn linear_get_dualpol_data(__py:Python, zippath:&str, config_path:&PyAny) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
+	let cfgpath:PyResult<_> = PyString::from_object(
+	    config_path,
+	    "utf-8",
+	    "");
+	let lin_param = match cfgpath {
+	    Ok(pth) => {
+		let s = pth.to_string_lossy();
+		match LinearConfig::parse_config(&s) {
+		    Ok(d) => d,
+		    Err(e) => {
+			println!("Error parsing config {}",e);
+			return exceptions::ValueError.into();
+		    }
+		}
+	    }
+	    Err(_e) => {
+		LinearConfig::default()
+	    }
+	};
+	match interface::linear_get_dualpol_data(zippath, &lin_param) {
 	    Ok((x, co16, k)) => {
 		let py_cross = PyArray::from_array(__py,&x).to_owned();
 		let py_co = PyArray::from_array(__py,&co16).to_owned();
@@ -100,7 +120,8 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///
     fn linear_get_customscale_data(__py:Python, zippath:&str, py_k:&PyArray1<f64>) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>)> {
 	let k = py_k.as_array();
-	match interface::linear_get_customscale_data(zippath, k, &LinearConfig::default()) {
+
+	match interface::linear_get_customscale_data(zippath, k) {
 	    Ok((x, co16)) => {
                 let py_cross = PyArray::from_array(__py,&x).to_owned();
                 let py_co = PyArray::from_array(__py,&co16).to_owned();
@@ -164,6 +185,8 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///     the method. Ignored if product type is 
     ///     true for applying the method
     ///     false to just use the default ESA noise floor for this.
+    /// config_path: str (optional)
+    ///     Optional path to config file. If None (or non-string) will use default configuration.
     ///
     /// Returns:
     /// (cross, co, m, v)
@@ -177,13 +200,43 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// b: ndarray(1)
     ///    Array of intercept parameters estimated
     #[pyfn(m, "lp_get_dualpol_data")]
-    fn lp_get_dualpol_data<'p>(__py:Python<'p>, zippath:&str, lstsq_rescale:bool)
+    fn lp_get_dualpol_data<'p>(__py:Python<'p>,
+			       zippath:&str,
+			       lstsq_rescale:bool,
+			       config_path:&PyAny)
 			   -> PyResult<(Py<PyArray2<f64>>,
 					Py<PyArray2<u16>>,
 					&'p PyList,
-					&'p PyList
-    )>{
-       match interface::lp_get_dualpol_data(zippath, lstsq_rescale, &LinearConfig::default()) {
+					&'p PyList)>
+    {
+	let cfgpath:PyResult<_> = PyString::from_object(
+	    config_path,
+	    "utf-8",
+	    "");
+	let (lin_param, lp_param) = match cfgpath {
+	    Ok(pth) => {
+		let s = pth.to_string_lossy();
+		(match LinearConfig::parse_config(&s) {
+		    Ok(d) => d,
+		    Err(e) => {
+			println!("Error parsing config {}",e);
+			return exceptions::ValueError.into();
+		    }
+		}, match HyperParams::parse_config(&s) {
+		    Ok(d) => d,
+		    Err(e) => {
+			println!("Error parsing config {}",e);
+			return exceptions::ValueError.into();
+		    }
+		})
+	    }
+	    Err(_e) => {
+		(LinearConfig::default(), HyperParams::default())
+	    }
+	};
+
+	    
+       match interface::lp_get_dualpol_data(zippath, lstsq_rescale, &lin_param, lp_param) {
 	   Ok((xv, co16, params)) => {
 
 	       let xout = Arc::try_unwrap(xv).expect("Could not unwrap");

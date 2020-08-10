@@ -36,7 +36,7 @@ pub fn linear_get_dualpol_data(zippath:&str, linpar:&LinearConfig)
 }
 
 
-pub fn linear_get_customscale_data(zippath:&str, k:ArrayView1<f64>, linpar:&LinearConfig)
+pub fn linear_get_customscale_data(zippath:&str, k:ArrayView1<f64>)
 				   -> Result<(Array2<f64>, Array2<u16>), String>
 {
 
@@ -73,7 +73,7 @@ pub fn linear_get_raw_data( zippath:&str)
 }    
 
 
-pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfig)
+pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfig, hp:HyperParams)
 			   -> Result<(Arc<TwoDArray>, Array2<u16>, Vec<Vec<est_lp::lin_params>>), String>{
     let archout = get_data_from_zip_path(zippath, true)?;
 
@@ -86,7 +86,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 		mv = prep_measurement(x16.view(), y_);
 	    }
 	    
-            let mut x = mv.clone();
+            let x = mv.clone();
 	    
             
             let sb:Vec<&[SwathElem]> = swath_bounds.iter().map(|a| a.as_slice()).collect();
@@ -106,7 +106,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 	    
 
 	    let xv = Arc::new(TwoDArray::from_ndarray(x));
-	    let hyper:Arc<HyperParams> = Arc::new(HyperParams::default());
+	    let hyper:Arc<HyperParams> = Arc::new(hp);
 	    let mino_list:Vec<Vec<f64>>;
 	    {
 		let base_v = Arc::new(TwoDArray::from_ndarray(mv));
