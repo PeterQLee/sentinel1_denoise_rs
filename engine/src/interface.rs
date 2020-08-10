@@ -101,9 +101,10 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 		"IW" => arr1(&[1.0,1.0,1.0]),
 		_ => { return Err("Invalid sentinel sensor mode".into()); }
 	    };
-
-            // TODO: need to test this for IW mode
-            apply_swath_scale(mv.view_mut(), noisefield.data.view(), k.view(), &sb);
+	    {
+		let nf = noisefield;
+		apply_swath_scale(mv.view_mut(), nf.data.view(), k.view(), &sb);
+	    }
 	    
 
 	    let xv = Arc::new(TwoDArray::from_ndarray(x));
@@ -116,7 +117,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 			// compute minimum on based on baseline
 		
 		mino_list = compute_mino_list(
-		    base_v.clone(),
+		    base_v,
 		    &lpargs.bt,
 		    hyper.clone(),
 		    &lpargs.id);
@@ -129,7 +130,7 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 		&lpargs.bt,
 		hyper.clone(),
 		&lpargs.id);
-	    println!("prestimate segments");
+
 	    let params = select_and_estimate_segments(xv.clone(),
 			    			      lpargs.mp_dict,
 			    			      &lpargs.bt,
