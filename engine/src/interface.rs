@@ -81,9 +81,12 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 
     match archout {
         SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, lpargs) => {
-            
-            let y_ = noisefield.data.view_mut();
-            let mut mv = prep_measurement(x16.view(), y_);
+
+            let mut mv:Array2<f64>;
+	    {
+		let y_ = noisefield.data.view_mut();
+		mv = prep_measurement(x16.view(), y_);
+	    }
 	    
             let mut x = mv.clone();
 	    
@@ -102,20 +105,23 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
             // TODO: need to test this for IW mode
             apply_swath_scale(mv.view_mut(), noisefield.data.view(), k.view(), &sb);
 	    
-	    
-	    let base_v = Arc::new(TwoDArray::from_ndarray(mv));
-	    let xv = Arc::new(TwoDArray::from_ndarray(x));
 
-	    
+	    let xv = Arc::new(TwoDArray::from_ndarray(x));
 	    let hyper:Arc<HyperParams> = Arc::new(HyperParams::default());
-	    
+	    let mino_list:Vec<Vec<f64>>;
+	    {
+		let base_v = Arc::new(TwoDArray::from_ndarray(mv));
+
+		
 			// compute minimum on based on baseline
-	    let mino_list:Vec<Vec<f64>> = compute_mino_list(
-		base_v.clone(),
-		&lpargs.bt,
-		hyper.clone(),
-		&lpargs.id);
-	    
+		
+		mino_list = compute_mino_list(
+		    base_v.clone(),
+		    &lpargs.bt,
+		    hyper.clone(),
+		    &lpargs.id);
+	    }
+		
 
 	    //compute weights
 	    let w_vec = LpApply::compute_weights_for_affine(
