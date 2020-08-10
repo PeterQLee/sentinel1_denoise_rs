@@ -24,12 +24,14 @@ pub fn multilook_and_floor(x:Arc<TwoDArray>, row_factor:usize, col_factor:usize,
     // For slight performance penality.
     let subsum = move |r:&Arc<TwoDArray>,i:usize,j:usize| -> f64 {
 	let mut total = 0.0;
-	let a_end = (r.rows - i*row_factor).min(row_factor);
-	let b_end = (r.cols - j*col_factor).min(col_factor);
+	//let a_end = (r.rows - i*row_factor).min(row_factor);
+	//let b_end = (r.cols - j*col_factor).min(col_factor);
+	let a_end = row_factor;
+	let b_end = col_factor;
 	let norm = 1.0/((a_end*b_end) as f64);
 	for a in 0..a_end {
 	    for b in 0..b_end {
-		total += r[(i+a,j+b)] * norm;
+		total += r[(row_factor*i+a,col_factor*j+b)] * norm;
 	    }
 	}
 	return total;
