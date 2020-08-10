@@ -6,9 +6,11 @@ use s1_noisefloor_engine::prep_lp;
 
 
 use numpy::{PyArray, PyArray1, PyArray2};
-use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyObject};
+//use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyObject, FromPyObject};
+use pyo3::prelude::{*};
 use pyo3::{wrap_pyfunction, exceptions};
 use pyo3::types::{PyList, PyString, PyAny};
+
 
 use std::sync::Arc;
 //extern crate lapack_src;
@@ -209,13 +211,16 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 					&'p PyList,
 					&'p PyList)>
     {
-	let cfgpath:PyResult<_> = PyString::from_object(
-	    config_path,
-	    "utf-8",
-	    "");
+	// let cfgpath:PyResult<_> = PyString::from_object(
+	//     config_path,
+	//     "utf-8",
+	//     "");
+	//let cfgpath:PyResult<PyString> = config_path.extract();
+	let cfgpath:PyResult<String> = config_path.extract();
+	//let cfgpath:PyResult<PyString> = PyString::extract(config_path);
 	let (lin_param, lp_param) = match cfgpath {
-	    Ok(pth) => {
-		let s = pth.to_string_lossy();
+	    Ok(s) => {
+		//let s = pth.to_string_lossy();
 		(match LinearConfig::parse_config(&s) {
 		    Ok(d) => d,
 		    Err(e) => {
@@ -230,8 +235,8 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 		    }
 		})
 	    }
-	    Err(_e) => {
-		println!("Error parsing config path. Using default");
+	    Err(e) => {
+		println!("Error parsing config path. Using default {:?}",e);
 		(LinearConfig::default(), HyperParams::default())
 	    }
 	};
