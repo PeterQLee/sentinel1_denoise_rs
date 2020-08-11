@@ -10,6 +10,7 @@ use std::string::String;
 use tiff::decoder::{Decoder, DecodingResult, Limits};
 use ndarray::{Array,Array2};
 use std::sync::{Arc};
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct SentinelFormatId {
@@ -231,11 +232,8 @@ fn decode_tiff(file:&mut ZipFile) -> Result<(Array2<u16>, (usize, usize)), Strin
 
 fn create_lpargs(file:&mut ZipFile,
 		 id: SentinelFormatId,
-		 swath_bounds:&mut Option<Vec<Vec<SwathElem>>>,
-		 w:&mut Option<Vec<usize>>,
-		 lp_args:&mut Option<LpAttributes>,
 		 az_noise:Array2<f64>
-)  {
+) -> (Vec<Vec<SwathElem>>,Vec<usize>, LpAttributes){
     let mut buffer = String::new();
     /* Get swathbound regions */
     let _xmldata = file.read_to_string(&mut buffer).unwrap();
@@ -265,148 +263,146 @@ fn create_lpargs(file:&mut ZipFile,
 								 &id,
 								 true
     );
-    *swath_bounds = Some(k.0);
-    *w = Some(k.1);
+    let swath_bounds = k.0;
+    let w = k.1;
     
-    *lp_args = Some(LpAttributes{bt:bt,
+    let lp_args = LpAttributes{bt:bt,
 				 mp_dict:mp_dict,
 				 split_indices:split_indices,
 				 eval_mp_dict:r_mp_dict,
 				 eval_split_indices:r_split_indices,
 				 id:id,
-				 az_noise:Arc::new(TwoDArray::from_ndarray(az_noise))
-    });
+			       az_noise:Arc::new(TwoDArray::from_ndarray(az_noise))};
+
+    (swath_bounds, w, lp_args)
   
 }
 
+
+
 /// Gets the original 16-bit image and noise field from a given path.
-pub fn get_data_from_zip_path(path:&str, bothpol_flag:bool) -> Result<SentinelArchiveOutput, String> {
-    let file_h = File::open(path);
-
-    match file_h {
-        Ok(f) => {
-            let mut ziparch:ZipArchive<File> = ZipArchive::new(f).unwrap();
-
-            let id: SentinelFormatId = find_format_id(&mut ziparch)?;
-
-            // generate the matching xml files for the calibration files we want.
-	    
-            let crosspol_anno = id.create_crosspol_annotation();
-            let crosspol_noise = id.create_crosspol_noise();
-            let crosspol_measurement = id.create_crosspol_measurement();
-            let copol_measurement = id.create_copol_measurement();
-	    
-
-            let mut swath_bounds:Option<Vec<Vec<SwathElem>>> = None;
-            let mut w:Option<Vec<usize>> = None;
-            let mut noisefield:Option<NoiseField> = None;
-            let mut measurement_array:Option<Array2<u16>> = None;
-            let mut copol_array:Option<Array2<u16>> = None;
-	    
-            let mut shape_o:Option<(usize, usize)> = None;
-	    
-            // Measurement files first, so we can get the required shape info
-            for i in 0..ziparch.len() {
-                let mut file = ziparch.by_index(i).unwrap();
-                // Get crosspol array from tiff file.
-                if file.name() == crosspol_measurement {
-		    let tmp = decode_tiff(&mut file)?;
-		    measurement_array = Some(tmp.0);
-		    shape_o =  Some(tmp.1);
-                }
-
-                // Get crosspol array from tiff file.
-                if bothpol_flag && file.name() == copol_measurement {
-		    let tmp = decode_tiff(&mut file)?;
-		    copol_array = Some(tmp.0);
-		    shape_o = Some(tmp.1);
-                }
-            }
-
-            let shape = shape_o.unwrap();
-
-
-	    // Parse nosiefield
-	    let mut az_noise:Option<Array2<f64>> = None;
-	    for i in 0..ziparch.len() {
-		let mut file = ziparch.by_index(i).unwrap();
-                // Get noise from noise calibration file.
-                if file.name() == crosspol_noise {
-                    let mut buffer = String::new();
-		    let _xmldata = file.read_to_string(&mut buffer).unwrap();
-                    noisefield = Some(NoiseField::new(&buffer, shape, true));
-
-		    //TODO: make this optional.
-		    az_noise = Some(NoiseField::compute_azimuth_field(&buffer, shape));
-                    
-                }
-		
-            }
-
-
-	    // Parse AZ noise
-	    let mut lp_args:Option<LpAttributes> = None;
-	    
-            for i in 0..ziparch.len() {
-                let mut file = ziparch.by_index(i).unwrap();
-		
-		
-                // Get swath bounds and period from anno file
-                if file.name() == crosspol_anno {
-		    create_lpargs(&mut file,
-				  id,
-				  &mut swath_bounds,
-				  &mut w,
-				  &mut lp_args,
-				  az_noise.unwrap()
-		    );
-		    break;
-                }
-	    }
-
-
-	
-            // Return the crosspol result only.
-            if !bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() {
-                return Ok(
-                    SentinelArchiveOutput::CrossPolOutput (
-                        swath_bounds.unwrap(),
-                        w.unwrap(),
-                        noisefield.unwrap(),
-                        measurement_array.unwrap(),
-			lp_args.unwrap(),
-                    )
-                );
-            }
-
-
-            // Both crosspol and co polarization
-            else if bothpol_flag && swath_bounds.is_some() && w.is_some() && noisefield.is_some() && measurement_array.is_some() && copol_array.is_some() {
-                return Ok(
-                    SentinelArchiveOutput::BothPolOutput (
-                        swath_bounds.unwrap(),
-                        w.unwrap(),
-                        noisefield.unwrap(),
-                        measurement_array.unwrap(),
-                        copol_array.unwrap(),
-			lp_args.unwrap(),
-                    )
-                );
-		
-                    
-            }
-	    //TODO: be specific about files not being found.
-            return Err("One or more files not found".into());
-
-        },
-	
-                    
+/// path can either be the path to the zip archive, or an unzipped directory
+pub fn get_data_from_zip_path(path_s:&str, bothpol_flag:bool) -> Result<SentinelArchiveOutput, String> {
+    // archive type
+    enum ArchType {
+	Dir(String),
+	ZipArch(ZipArchive)
+    }
     
-	Err(_e) => {
-	    let v = format!("Cannot open zipfile {}", path);
-            return Err(v);
-	    //	    return Err("Cannot open zipfile {}");
+    macro_rules! get_file_handle {
+	($fo:expr, $name:expr) => {
+	    match $fo {
+		Dir(f) => {
+		    File::open(format!("{}/../{}", path_s, f))
+		},
+		ZipArch(f) => {
+		    match f.by_name($name) {
+			Ok(g) => g,
+			Err(_e) => return Err(format!("Cannot find file {}",$name))
+		    }
+		}
+	    }
 	}
     }
+
+    let path = Path::new(path_s);
+    let mut ziparch = match path.is_dir() {
+	true => Dir(path_s.to_string()),
+	false => {
+	    match File::open(path) {
+		Ok(f) => {
+		    match ZipArchive::new(f) {
+			Ok(z) => ArchType::ZipArch(z),
+			Err(e) => return Err(format!("Error parsing zip: {:?}", e));
+		    }
+		},
+		Err(e) => {return Err(format!("Could not open file: {}", path_s))}
+	    }
+	}
+    };
+    
+	//File::open(path);
+	
+	
+    //let mut ziparch:ZipArchive<File> = ZipArchive::new(f).unwrap();
+    let id: SentinelFormatId = find_format_id(&mut ziparch)?;
+    
+    // generate the matching xml files for the calibration files we want.
+    
+    let crosspol_anno = id.create_crosspol_annotation();
+    let crosspol_noise = id.create_crosspol_noise();
+    let crosspol_measurement = id.create_crosspol_measurement();
+    let copol_measurement = id.create_copol_measurement();
+    
+    // cross measurement
+    let (measurement_array, shape) = {
+	let mut file = get_file_handle!(ziparch,crosspol_measurement.as_str());
+	//get_file_handle(zp, crosspol_measurement.as_str())?;
+	decode_tiff(&mut file)?
+    };
+    
+    // co measurement
+    let mut copol_array:Option<Array2<u16>> = None;
+    if bothpol_flag {
+	//file = get_file_handle(zp, copol_measurement.as_str())?;
+	let mut file = get_file_handle!(ziparch, copol_measurement.as_str());
+	copol_array = Some(decode_tiff(&mut file)?.0);
+    }
+    
+    // default noise floor
+    //file = get_file_handle(zp, crosspol_noise.as_str())?;
+    let buffer = {
+	let mut file = get_file_handle!(ziparch,crosspol_noise.as_str());
+	let mut buffer = String::new();
+	let _xmldata = file.read_to_string(&mut buffer).unwrap();
+	buffer
+	    
+	//azimuth noise
+
+    };
+    let noisefield = NoiseField::new(&buffer, shape, true);
+    let az_noise = NoiseField::compute_azimuth_field(&buffer, shape);
+
+    // lp data
+    //file = get_file_handle(zp, crosspol_anno.as_str())?;
+    let (swath_bounds,w,lp_args):(Vec<Vec<SwathElem>>,Vec<usize>,LpAttributes) = {
+	let mut file = get_file_handle!(ziparch, crosspol_anno.as_str());
+	create_lpargs(&mut file,id,az_noise)
+    };
+    
+    // Return the crosspol result only.
+    if !bothpol_flag {
+        return Ok(SentinelArchiveOutput::CrossPolOutput (
+            swath_bounds,
+            w,
+            noisefield,
+            measurement_array,
+	    lp_args));
+    }
+
+    else  {
+	// Both crosspol and co polarization
+        return Ok(
+            SentinelArchiveOutput::BothPolOutput (
+                swath_bounds,
+                w,
+                noisefield,
+                measurement_array,
+                copol_array.unwrap(),
+		lp_args,
+            )
+        );
+	
+        
+    }
+}
+
+                    
+    
+	// Err(_e) => {
+	//     let v = format!("Cannot open zipfile {}", path_s);
+        //     return Err(v);
+	// }
+
 }
 

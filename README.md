@@ -10,6 +10,7 @@ You will need to install rust nightly.
 4. HDFlib-dev
 5. cd into this directory. Run `python3 setup.py`
 
+## TODO: explain scs requirement.
 
 ## Usage
 
