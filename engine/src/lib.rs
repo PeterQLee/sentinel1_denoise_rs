@@ -1,5 +1,5 @@
 #![feature(get_mut_unchecked)]
-#[macro_use(s)]
+
 extern crate ndarray;
 //extern crate ndarray_linalg;
 extern crate lapack;

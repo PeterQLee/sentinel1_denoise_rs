@@ -11,7 +11,7 @@ numpy = "0.7.0"
 s1-noisefloor-engine = {path = "../engine"}
 libc = "*"
 hdf5 = "0.6.1"
-
+clap = "2.33.2"
 
 [dependencies.pyo3]
 version = "0.8"
@@ -26,6 +26,6 @@ crate-type = ["staticlib", "cdylib"]
 name = "s1_noisefloor"
 path = "src/lib.rs"
 
-# [[bin]]
-# name = "denoise_s1"
-# path= "src/cli.rs"
+[[bin]]
+name = "denoise_s1"
+path= "src/cli.rs"

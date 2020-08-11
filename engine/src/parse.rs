@@ -128,7 +128,7 @@ impl NoiseField {
     /// * `filebuffer` - The buffer holding the contents of the noise cal xml file
     ///
     /// * `two_eight_flag` - Flag indicates if product is from IPF 2.8 or later
-    pub fn new(filebuffer:&str, shape:(usize, usize), two_eight_flag:bool) -> NoiseField {
+    pub fn new(filebuffer:&str, shape:(usize, usize), _two_eight_flag:bool) -> NoiseField {
         let mut reader = Reader::from_str(filebuffer);
 
         //if two_eight_flag {
@@ -166,7 +166,7 @@ impl NoiseField {
         let mut azarr = NoiseField::interpolate_col(azimuth_result, shape);
 
 	// Normalize azarr
-	//NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
+	NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
 	
 	azarr
     }
@@ -189,10 +189,7 @@ impl NoiseField {
 	
     }
 
-    
-    fn old_compute_field(rg_result:Vec<NoiseRangeEntry>) {
-        
-    }
+
     
     fn compute_field(rg_result:Vec<NoiseRangeEntry>, az_result:Vec<NoiseAzimuthEntry>, shape:(usize, usize)) -> Array2<f64>{
         let rgarr = NoiseField::interpolate_row(rg_result, shape);
@@ -950,7 +947,7 @@ impl TimeRowLut {
     }
 
     /// Return a closure that is applied to interpolate the values.
-    pub fn interp_angle_to_col(&self)  -> Box<Fn(&[f64], usize) -> Vec<f64>>
+    pub fn interp_angle_to_col(&self)  -> Box<dyn Fn(&[f64], usize) -> Vec<f64>>
     {
 	// determine unique row entries
 	let mut unique_rows = HashSet::new();

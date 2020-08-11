@@ -46,7 +46,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///
     /// Parameters:
     ///
-    /// zippath: str
+    /// archpath: str
     ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
     ///
     ///
@@ -62,7 +62,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// k: ndarray(1)
     ///    array of the estimated linear parameters
     #[pyfn(m, "linear_get_dualpol_data")]
-    fn linear_get_dualpol_data(__py:Python, zippath:&str, config_path:&PyAny) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
+    fn linear_get_dualpol_data(__py:Python, archpath:&str, config_path:&PyAny) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>, Py<PyArray1<f64>>)> {
 	let cfgpath:PyResult<_> = PyString::from_object(
 	    config_path,
 	    "utf-8",
@@ -73,16 +73,17 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 		match LinearConfig::parse_config(&s) {
 		    Ok(d) => d,
 		    Err(e) => {
-			println!("Error parsing config {}",e);
+			println!("Could not parse config {}",e);
 			return exceptions::ValueError.into();
 		    }
 		}
 	    }
 	    Err(_e) => {
+		println!("Could not parse config path or was not provided. Using default.");
 		LinearConfig::default()
 	    }
 	};
-	match interface::linear_get_dualpol_data(zippath, &lin_param) {
+	match interface::linear_get_dualpol_data(archpath, &lin_param) {
 	    Ok((x, co16, k)) => {
 		let py_cross = PyArray::from_array(__py,&x).to_owned();
 		let py_co = PyArray::from_array(__py,&co16).to_owned();
@@ -103,7 +104,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///
     /// Parameters:
     ///
-    /// zippath: str
+    /// archpath: str
     ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
     /// k: ndarray(1)
     ///     One dimensional array in 64-bit float that indicates the linear scaling parameters
@@ -120,10 +121,10 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// co: ndarray(2)
     ///    array holding unprocessed co-polarized measurements (linear)
     ///
-    fn linear_get_customscale_data(__py:Python, zippath:&str, py_k:&PyArray1<f64>) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>)> {
+    fn linear_get_customscale_data(__py:Python, archpath:&str, py_k:&PyArray1<f64>) -> PyResult<(Py<PyArray2<f64>>,Py<PyArray2<u16>>)> {
 	let k = py_k.as_array();
 
-	match interface::linear_get_customscale_data(zippath, k) {
+	match interface::linear_get_customscale_data(archpath, k) {
 	    Ok((x, co16)) => {
                 let py_cross = PyArray::from_array(__py,&x).to_owned();
                 let py_co = PyArray::from_array(__py,&co16).to_owned();
@@ -144,7 +145,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///
     /// Parameters:
     ///
-    /// zippath: str
+    /// archpath: str
     ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
     ///
     /// Returns:
@@ -156,8 +157,8 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///    array holding unprocessed co-polarized measurements (linear)
     /// y: ndarray(2)
     ///    array holding noise field (linear)
-    fn linear_get_raw_data(__py:Python, zippath:&str) -> PyResult<(Py<PyArray2<u16>>, Py<PyArray2<u16>>, Py<PyArray2<f64>>)> {
-	match interface::linear_get_raw_data(zippath) {
+    fn linear_get_raw_data(__py:Python, archpath:&str) -> PyResult<(Py<PyArray2<u16>>, Py<PyArray2<u16>>, Py<PyArray2<f64>>)> {
+	match interface::linear_get_raw_data(archpath) {
 	    Ok((x, co16, y)) => {
                 let py_cross = PyArray::from_array(__py,&x).to_owned();
                 let py_co = PyArray::from_array(__py,&co16).to_owned();
@@ -179,7 +180,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///
     /// Parameters:
     ///
-    /// zippath: str
+    /// archpath: str
     ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
     /// lstsq_rescale: bool
     ///     Indicate whether you want to apply the least squares method from
@@ -203,7 +204,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///    Array of intercept parameters estimated
     #[pyfn(m, "lp_get_dualpol_data")]
     fn lp_get_dualpol_data<'p>(__py:Python<'p>,
-			       zippath:&str,
+			       archpath:&str,
 			       lstsq_rescale:bool,
 			       config_path:&PyAny)
 			   -> PyResult<(Py<PyArray2<f64>>,
@@ -235,14 +236,14 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 		    }
 		})
 	    }
-	    Err(e) => {
-		println!("Error parsing config path. Using default {:?}",e);
+	    Err(_e) => {
+		println!("Could not parse config path or was not provided. Using default.");
 		(LinearConfig::default(), HyperParams::default())
 	    }
 	};
 
 	    
-       match interface::lp_get_dualpol_data(zippath, lstsq_rescale, &lin_param, lp_param) {
+       match interface::lp_get_dualpol_data(archpath, lstsq_rescale, &lin_param, lp_param) {
 	   Ok((xv, co16, params)) => {
 
 	       let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
@@ -270,7 +271,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 	}
 			   }
     /// Applies custom scaling based on provided lp parameters.
-    fn lp_get_customscale_data<'p>(__py:Python<'p>, zippath:&str, lstsq_rescale:bool)
+    fn lp_get_customscale_data<'p>(__py:Python<'p>, archpath:&str, lstsq_rescale:bool)
 			   // -> PyResult<(Py<PyArray2<f64>>,
 			   // 		Py<PyArray2<u16>>,
 			   // 		&'p PyList,

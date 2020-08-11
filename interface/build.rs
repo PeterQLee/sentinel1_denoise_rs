@@ -2,7 +2,7 @@ extern crate pkg_config;
 
 use std::env;
 use std::path::Path;
-use std::process::Command;
+
 fn main() {
     match pkg_config::probe_library("scs"){
 	Ok(_) => {}

@@ -13,7 +13,7 @@ use rustfft::num_complex::Complex64;
 use ndarray::{Array2, ArrayView, Ix2};
 use std::thread;
 
-pub type ArrToArr = Arc<Fn(&[usize]) -> Vec<f64> + Sync + Send> ;
+pub type ArrToArr = Arc<dyn Fn(&[usize]) -> Vec<f64> + Sync + Send> ;
 
 #[derive(Debug)]
 pub struct TwoDArray{
