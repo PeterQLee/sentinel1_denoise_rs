@@ -1,7 +1,7 @@
 /// Module for reading from sentinel-1 zip archive.
 use crate::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern};
 use crate::prep_lp::{ArrToArr, MidPoint, get_interpolation_pattern, TwoDArray};
-use zip::read::{ZipArchive, ZipFile};
+use zip::read::{ZipArchive};
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::fs::File;
@@ -11,6 +11,7 @@ use tiff::decoder::{Decoder, DecodingResult, Limits};
 use ndarray::{Array,Array2};
 use std::sync::{Arc};
 use std::path::Path;
+use std::fs;
 
 #[derive(Debug)]
 pub struct SentinelFormatId {
@@ -175,8 +176,8 @@ pub fn get_id_prefix(token:&str) -> Option<SentinelFormatId>{
     }
 }
 
-
-fn find_format_id(ziparch:&mut ZipArchive<File>) -> Result<SentinelFormatId, String>  {
+/// get zip format from file
+fn find_zip_format_id(ziparch:&mut ZipArchive<File>) -> Result<SentinelFormatId, String>  {
     for i in 0..ziparch.len() {
         let filename = ziparch.by_index(i).unwrap();
 	
@@ -188,10 +189,28 @@ fn find_format_id(ziparch:&mut ZipArchive<File>) -> Result<SentinelFormatId, Str
         }
     }
     Err("Error: The given zip/directory archive is not formatted as Sentinel-1 archive".into())
-
 }
 
-fn decode_tiff(file:&mut ZipFile) -> Result<(Array2<u16>, (usize, usize)), String> {
+fn find_dir_format_id(dir:&str) -> Result<SentinelFormatId, String> {
+    let path = Path::new(dir);
+    for entry in fs::read_dir(path).unwrap() {
+	let bt = path.file_name().unwrap().to_str().unwrap();
+	let nd = entry.unwrap();
+	let na = nd.file_name();
+	let name = na.to_str().unwrap();
+	match get_id_prefix(format!("{}/{}",bt, name).as_str()) {
+	    Some(id_result) => {
+                return Ok(id_result);
+            },
+            None => {}
+	}
+    }
+    Err("Error: The given zip/directory archive is not formatted as Sentinel-1 archive".into())
+}
+
+fn decode_tiff<F>(file:&mut F) -> Result<(Array2<u16>, (usize, usize)), String>
+    where F: Read
+{
     let mut buffer = Vec::new();
     let _xmldata = file.read_to_end(&mut buffer);
     let virt_file = Cursor::new(buffer);
@@ -230,10 +249,12 @@ fn decode_tiff(file:&mut ZipFile) -> Result<(Array2<u16>, (usize, usize)), Strin
 }
 
 
-fn create_lpargs(file:&mut ZipFile,
+fn create_lpargs<F>(file:&mut F,
 		 id: SentinelFormatId,
 		 az_noise:Array2<f64>
-) -> (Vec<Vec<SwathElem>>,Vec<usize>, LpAttributes){
+) -> (Vec<Vec<SwathElem>>,Vec<usize>, LpAttributes)
+    where F: Read
+{
     let mut buffer = String::new();
     /* Get swathbound regions */
     let _xmldata = file.read_to_string(&mut buffer).unwrap();
@@ -286,46 +307,47 @@ pub fn get_data_from_zip_path(path_s:&str, bothpol_flag:bool) -> Result<Sentinel
     // archive type
     enum ArchType {
 	Dir(String),
-	ZipArch(ZipArchive)
+	ZipA(ZipArchive<File>)
     }
-    
     macro_rules! get_file_handle {
 	($fo:expr, $name:expr) => {
-	    match $fo {
-		Dir(f) => {
-		    File::open(format!("{}/../{}", path_s, f))
-		},
-		ZipArch(f) => {
-		    match f.by_name($name) {
-			Ok(g) => g,
-			Err(_e) => return Err(format!("Cannot find file {}",$name))
-		    }
-		}
+	    match $fo.by_name($name) {
+		Ok(g) => g,
+		Err(_e) => return Err(format!("Cannot find file {}",$name))
+	    }
+	}
+    }
+
+    macro_rules! get_dir_handle {
+	($name:expr) => {
+	    match File::open($name) {
+		Ok(g) => Ok(g),
+		Err(_e) => Err(format!("Cannot find file {}",$name))
 	    }
 	}
     }
 
     let path = Path::new(path_s);
-    let mut ziparch = match path.is_dir() {
-	true => Dir(path_s.to_string()),
+    let mut zh = match path.is_dir() {
+	true => {ArchType::Dir(path.parent().unwrap().to_str().unwrap().to_string())}
 	false => {
 	    match File::open(path) {
 		Ok(f) => {
 		    match ZipArchive::new(f) {
-			Ok(z) => ArchType::ZipArch(z),
-			Err(e) => return Err(format!("Error parsing zip: {:?}", e));
+			Ok(z) => ArchType::ZipA(z),
+			Err(e) => return Err(format!("Error parsing zip: {:?}", e))
 		    }
 		},
-		Err(e) => {return Err(format!("Could not open file: {}", path_s))}
+		Err(_e) => {return Err(format!("Could not open file: {}", path_s))}
 	    }
 	}
     };
-    
-	//File::open(path);
-	
-	
+
     //let mut ziparch:ZipArchive<File> = ZipArchive::new(f).unwrap();
-    let id: SentinelFormatId = find_format_id(&mut ziparch)?;
+    let id: SentinelFormatId = match &mut zh {
+	ArchType::ZipA(ziparch) => {find_zip_format_id(ziparch)?},
+	ArchType::Dir(_a) => find_dir_format_id(path_s)?
+    };
     
     // generate the matching xml files for the calibration files we want.
     
@@ -336,67 +358,101 @@ pub fn get_data_from_zip_path(path_s:&str, bothpol_flag:bool) -> Result<Sentinel
     
     // cross measurement
     let (measurement_array, shape) = {
-	let mut file = get_file_handle!(ziparch,crosspol_measurement.as_str());
-	//get_file_handle(zp, crosspol_measurement.as_str())?;
-	decode_tiff(&mut file)?
+	match &mut zh {
+	    ArchType::ZipA(ziparch) => {
+		let mut file = get_file_handle!(ziparch,crosspol_measurement.as_str());
+		decode_tiff(&mut file)?
+	    },
+	    ArchType::Dir(a) => {
+		let mut file:File = get_dir_handle!(format!("{}/{}", a, crosspol_measurement.as_str()).as_str())?;
+		decode_tiff(&mut file)?
+	    }
+
+	}
     };
     
     // co measurement
     let mut copol_array:Option<Array2<u16>> = None;
     if bothpol_flag {
-	//file = get_file_handle(zp, copol_measurement.as_str())?;
-	let mut file = get_file_handle!(ziparch, copol_measurement.as_str());
-	copol_array = Some(decode_tiff(&mut file)?.0);
+	match &mut zh {
+	    ArchType::ZipA(ziparch) => {
+		let mut file = get_file_handle!(ziparch, copol_measurement.as_str());
+		copol_array = Some(decode_tiff(&mut file)?.0);
+	    },
+	    ArchType::Dir(a) => {
+		let mut file:File = get_dir_handle!(format!("{}/{}", a, copol_measurement.as_str()).as_str())?;
+		copol_array = Some(decode_tiff(&mut file)?.0);
+	    }
+	}
     }
     
     // default noise floor
-    //file = get_file_handle(zp, crosspol_noise.as_str())?;
-    let buffer = {
-	let mut file = get_file_handle!(ziparch,crosspol_noise.as_str());
-	let mut buffer = String::new();
-	let _xmldata = file.read_to_string(&mut buffer).unwrap();
-	buffer
+    let buffer = match &mut zh {
+	ArchType::ZipA(ziparch) => {
+	    let mut file = get_file_handle!(ziparch,crosspol_noise.as_str());
+	    let mut buffer = String::new();
+	    let _xmldata = file.read_to_string(&mut buffer).unwrap();
+	    buffer
+	},
+	ArchType::Dir(a) => {
+	    let mut file:File = get_dir_handle!(format!("{}/{}", a, crosspol_noise.as_str()).as_str())?;
+	    let mut buffer = String::new();
+	    let _xmldata = file.read_to_string(&mut buffer).unwrap();
+	    buffer
+	}
+    };
+    
+    
 	    
 	//azimuth noise
 
-    };
+    
     let noisefield = NoiseField::new(&buffer, shape, true);
     let az_noise = NoiseField::compute_azimuth_field(&buffer, shape);
 
     // lp data
     //file = get_file_handle(zp, crosspol_anno.as_str())?;
     let (swath_bounds,w,lp_args):(Vec<Vec<SwathElem>>,Vec<usize>,LpAttributes) = {
-	let mut file = get_file_handle!(ziparch, crosspol_anno.as_str());
-	create_lpargs(&mut file,id,az_noise)
+	match &mut zh {
+	    ArchType::ZipA(ziparch) => {
+		let mut file = get_file_handle!(ziparch, crosspol_anno.as_str());
+		create_lpargs(&mut file,id,az_noise)
+	    },
+	    ArchType::Dir(a) => {
+		let mut file:File = get_dir_handle!(format!("{}/{}", a, crosspol_anno.as_str()).as_str())?;
+		create_lpargs(&mut file,id,az_noise)
+	    }
+	}
     };
+
     
     // Return the crosspol result only.
     if !bothpol_flag {
-        return Ok(SentinelArchiveOutput::CrossPolOutput (
-            swath_bounds,
-            w,
-            noisefield,
-            measurement_array,
+	return Ok(SentinelArchiveOutput::CrossPolOutput (
+	    swath_bounds,
+	    w,
+	    noisefield,
+	    measurement_array,
 	    lp_args));
     }
 
     else  {
 	// Both crosspol and co polarization
-        return Ok(
-            SentinelArchiveOutput::BothPolOutput (
-                swath_bounds,
-                w,
-                noisefield,
-                measurement_array,
-                copol_array.unwrap(),
+	return Ok(
+	    SentinelArchiveOutput::BothPolOutput (
+		swath_bounds,
+		w,
+		noisefield,
+		measurement_array,
+		copol_array.unwrap(),
 		lp_args,
-            )
-        );
+	    )
+	);
 	
-        
+	
     }
-}
 
+}
                     
     
 	// Err(_e) => {
@@ -404,5 +460,5 @@ pub fn get_data_from_zip_path(path_s:&str, bothpol_flag:bool) -> Result<Sentinel
         //     return Err(v);
 	// }
 
-}
+
 
