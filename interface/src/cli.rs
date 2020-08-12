@@ -92,16 +92,19 @@ LpEst:
 	     .required(true))
     	.arg(Arg::with_name("config")
 	     .short("c")
+	     .takes_value(true)
 	     .value_name("Config")
 	     .help("Configuration file for default arguments to the algorithm and solvers")
 	     .required(false))
 	.arg(Arg::with_name("ParamHDF")
 	     .short("p")
 	     .help("HDF5 archive holding the parameters you want to apply for overriding the method\nOnly required for LinearApply")
+	     .takes_value(true)
 	     .required(false))
 	.arg(Arg::with_name("lstsq_rescale")
 	     .short("r")
 	     .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true")
+	     .takes_value(true)
 	     .required(false))
 	.get_matches();
     // .arg(Arg::with_name("k")
@@ -176,11 +179,12 @@ fn linear_get_dualpol_data(archpath:&str, outf:hdf5::File, config:Option<&str>) 
 	Some(s) =>  match LinearConfig::parse_config(s) {
 	    Ok(d) => d,
 	    Err(e) => {
-		println!("Could not parse config {}",e);
+		println!("Could not parse config: {}",e);
 		std::process::exit(1);
 	    }
 	},
-	None => {LinearConfig::default()}
+	None => {println!("Could not parse config path or was not provided. Using default.");
+		 LinearConfig::default()}
     };
     // ensure that none of these groups exist.
     check_link!(outf,"crosspol");
@@ -256,13 +260,13 @@ fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, confi
 	    (match LinearConfig::parse_config(&s) {
 		Ok(d) => d,
 		Err(e) => {
-		    eprintln!("Error parsing config {}",e);
+		    eprintln!("Error parsing config: {}",e);
 		    std::process::exit(1);
 		}
 	    }, match HyperParams::parse_config(&s) {
 		Ok(d) => d,
 		Err(e) => {
-		    eprintln!("Error parsing config {}",e);
+		    eprintln!("Error parsing config: {}",e);
 			std::process::exit(1);
 		}
 	    })
