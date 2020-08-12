@@ -12,6 +12,7 @@ s1-noisefloor-engine = {path = "../engine"}
 libc = "*"
 hdf5 = "0.6.1"
 clap = "2.33.2"
+ndarray = "0.13.0"
 
 [dependencies.pyo3]
 version = "0.8"

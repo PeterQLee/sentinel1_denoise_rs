@@ -1,8 +1,14 @@
 extern crate s1_noisefloor_engine;
+
 use s1_noisefloor_engine::parse::{LinearConfig, HyperParams};
 #[macro_use]
 extern crate clap;
 use clap::{Arg, App};
+use ndarray;
+use std::sync::Arc;
+use hdf5;
+
+
 
 use s1_noisefloor_engine::interface;
 
@@ -16,11 +22,11 @@ arg_enum! {
     }
 }
 
-fn check_path(path:&str) -> bool {
-    true
+fn check_path(path:&str) -> hdf5::Result<hdf5::File> {
+    hdf5::File::create(path)
 }
 
-fn main() {
+fn main() -> hdf5::Result<()> {
     let matches = App::new("Sentinel-1 noisefloor removal")
 	.version("1.0")
 	.author("Peter Q. Lee <pqjlee@uwaterloo.ca>")
@@ -79,7 +85,7 @@ LpEst:
 	     .possible_values(&OpModes::variants()))
 	.arg(Arg::with_name("InputSAR")
 	     .help("Input SAR archive or directory")
-	     //.value_name("FILE")
+	     .value_name("FILE")
 	     .required(true))
 	.arg(Arg::with_name("OutputHDF")
 	     .help("Output hdf5 file")
@@ -89,64 +95,213 @@ LpEst:
 	     .value_name("Config")
 	     .help("Configuration file for default arguments to the algorithm and solvers")
 	     .required(false))
-	.arg(Arg::with_name("k")
-	     .short("k")
-	     .help("Comma seperated values for linear scalars to apply")
-	     .required(false)).get_matches();
-	     
+	.arg(Arg::with_name("ParamHDF")
+	     .short("p")
+	     .help("HDF5 archive holding the parameters you want to apply for overriding the method\nOnly required for LinearApply")
+	     .required(false))
+	.arg(Arg::with_name("lstsq_rescale")
+	     .short("r")
+	     .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true")
+	     .required(false))
+	.get_matches();
+    // .arg(Arg::with_name("k")
+    //      .short("k")
+    //      .help("Comma seperated values for linear scalars to apply")
+    //      .required(false)).get_matches();
+    
 
     let config:Option<&str> = matches.value_of("config");
+    let paramhdf_s:Option<&str> = matches.value_of("ParamHDF");
     let opmode:OpModes = value_t!(matches.value_of("OpMode"), OpModes).unwrap_or_else(|e| e.exit());
     let out_path:&str = matches.value_of("OutputHDF").unwrap();
     let sarpath:&str = matches.value_of("InputSAR").unwrap();
 
-    if check_path(out_path){
-	match opmode {
-	    LinearEst => {linear_get_dualpol_data(sarpath, out_path, config);},
-	    LinearApply => {},
-	    Raw => {linear_get_raw_data(sarpath, out_path);},
-	    LPEst => {}//{lp_get_dualpol_data();}
+
+    let lstsq_rescale:bool = value_t!(matches.value_of("lstsq_rescale"), bool).unwrap_or_else(|_e| {true});
+    // Debug statement
+    if !lstsq_rescale {println!("not estimating least squares");}
+
+    let paramhdf:hdf5::Result<hdf5::File> = match paramhdf_s{
+	Some(s) => hdf5::File::open(s),
+	None => Err(hdf5::Error::Internal(format!("Could not open parameter file")))
+    };
+
+    match check_path(out_path){
+	Ok(outf) =>  match opmode {
+	    OpModes::LinearEst => {linear_get_dualpol_data(sarpath, outf, config)?;},
+	    OpModes::LinearApply => {linear_get_customscale_data(sarpath, outf, paramhdf)?;},
+	    OpModes::Raw => {linear_get_raw_data(sarpath, outf)?;},
+	    OpModes::LPEst => {lp_get_dualpol_data(sarpath, outf, lstsq_rescale, config)?;}//{lp_get_dualpol_data();}
+	},
+	Err(e) => {
+	    eprintln!("Cannot open HDF5 file: {:?}.", e);
+	    std::process::exit(1);
 	}
     }
-    else {
-	println!("Invalid output path={}. Parent directory does not exist.", out_path);
-    }
-	     
+    Ok(())
 }
 
+	     
 
-fn linear_get_dualpol_data(archpath:&str, outpath:&str, config:Option<&str>)  {
+
+
+fn write_arrayf64<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:ndarray::ArrayView<f64, D>) -> hdf5::Result<()>
+
+{
+    let s = arr.shape().to_vec();
+    let group = outf.new_dataset::<f64>().create(fieldname, &s)?;
+    group.write(arr)?;
+    Ok(())
+}
+
+fn write_arrayu16<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:ndarray::ArrayView<u16, D>) -> hdf5::Result<()>
+
+{
+    let s = arr.shape().to_vec();
+    let group = outf.new_dataset::<u16>().create(fieldname, &s)?;
+    group.write(arr)?;
+    Ok(())
+}
+
+macro_rules! check_link {
+    ($outf:expr, $g:expr) => {
+	if $outf.link_exists($g) {
+	    return Err(hdf5::Error::Internal(format!("Cannot write to file. Dataset {} already exists", $g)));
+	}
+    }	
+}
+
+fn linear_get_dualpol_data(archpath:&str, outf:hdf5::File, config:Option<&str>) -> hdf5::Result<()> {
     let lin_param:LinearConfig = match config {
-	Some(s) =>  match LinearConfig::parse_config(s) => {
+	Some(s) =>  match LinearConfig::parse_config(s) {
 	    Ok(d) => d,
 	    Err(e) => {
 		println!("Could not parse config {}",e);
-		return exceptions::ValueError.into();
+		std::process::exit(1);
 	    }
 	},
 	None => {LinearConfig::default()}
     };
+    // ensure that none of these groups exist.
+    check_link!(outf,"crosspol");
+    check_link!(outf,"copol");
+    check_link!(outf,"k");
     
     match interface::linear_get_dualpol_data(archpath, &lin_param) {
 	Ok((x, co16, k)) => {
 	    //write output directories.
-	}
+	    write_arrayf64(&outf, "crosspol", x.view())?;
+	    write_arrayu16(&outf, "copol", co16.view())?;
+	    write_arrayf64(&outf, "k", k.view())?;
+	},
 	 Err(e) => {
-	     eprintln!("An error occurred. No output {}",e);
+	     eprintln!("An error occurred. No output written: {}",e);
 	     std::process::exit(1);
 	 }
     }
+    Ok(())
+}
+
+fn read_k(datafile:&hdf5::File) -> hdf5::Result<ndarray::Array1<f64>> {
+    let kgroup = datafile.dataset("k")?;
+    kgroup.read_1d::<f64>()
+}
+
+fn linear_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result<hdf5::File>) -> hdf5::Result<()> {
+    // ensure that none of these groups exist.
+    check_link!(outf,"crosspol");
+    check_link!(outf,"copol");
     
-
-}
-
-fn linear_get_customscale_data(zippath:&str,  outpath:&str, py_k:Vec<f64>) {
-}
-
-fn linear_get_raw_data(zippath:&str, outpath:&str,) {
+    // Find the scale data in the datafile
+    let df = datafile?;
+    let k = read_k(&df)?;
     
+    match interface::linear_get_customscale_data(archpath, k.view()) {
+	Ok((x, co16)) => {
+	    write_arrayf64(&outf, "crosspol", x.view())?;
+	    write_arrayu16(&outf, "copol", co16.view())?;
+	},
+	Err(e) => {
+	     eprintln!("An error occurred. No output written: {}",e);
+	     std::process::exit(1);
+	 }
+    }
+    Ok(())
 }
 
-fn lp_get_dualpol_data(zippath:&str,  outpath:&str, lstsq_rescale:bool){
+fn linear_get_raw_data(archpath:&str, outf:hdf5::File) -> hdf5::Result<()> {
+    check_link!(outf,"crosspol");
+    check_link!(outf,"copol");
+    check_link!(outf,"y");
+    match interface::linear_get_raw_data(archpath) {
+	Ok((x, co16, y)) => {
+	    write_arrayu16(&outf, "crosspol", x.view())?;
+	    write_arrayu16(&outf, "copol", co16.view())?;
+	    write_arrayf64(&outf, "y", y.view())?;
+	},
+	Err(e) => {
+	     eprintln!("An error occurred. No output written: {}",e);
+	     std::process::exit(1);
+	 }
+    }
+    Ok(())
+}
+
+fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, config:Option<&str>) -> hdf5::Result<()> {
+
+
+    let (lin_param, lp_param) = match config{
+	Some(s) => {
+		//let s = pth.to_string_lossy();
+	    (match LinearConfig::parse_config(&s) {
+		Ok(d) => d,
+		Err(e) => {
+		    eprintln!("Error parsing config {}",e);
+		    std::process::exit(1);
+		}
+	    }, match HyperParams::parse_config(&s) {
+		Ok(d) => d,
+		Err(e) => {
+		    eprintln!("Error parsing config {}",e);
+			std::process::exit(1);
+		}
+	    })
+	}
+	None => {
+	    println!("Could not parse config path or was not provided. Using default.");
+	    (LinearConfig::default(), HyperParams::default())
+	}
+    };
+    check_link!(outf,"crosspol");
+    check_link!(outf,"copol");
+    check_link!(outf,"m");
+    check_link!(outf,"b");
+    check_link!(outf,"subswaths");
+    
+    match interface::lp_get_dualpol_data(archpath, lstsq_rescale, &lin_param, lp_param) {
+	Ok((xv, co16, params)) => {
+	    let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
+	    let xview = xout.to_ndarray();
+	    write_arrayf64(&outf, "crosspol", xview)?;
+	    write_arrayu16(&outf, "copol", co16.view())?;
+	    let m:Vec<f64> = params.iter().map(|i| i.iter()
+				      .map(|j| j.m))
+		.flatten().collect();
+	    let b:Vec<f64> = params.iter().map(|i| i.iter()
+				      .map(|j| j.b))
+		.flatten().collect();
+	    let num_ss:u32 = params.len() as u32;
+
+	    write_arrayf64(&outf, "m", ndarray::ArrayView::from(&m))?;
+	    write_arrayf64(&outf, "b", ndarray::ArrayView::from(&b))?;
+	    let group = outf.new_dataset::<u32>().create("subswaths", &[1])?;
+	    group.write(&[num_ss])?;
+	}
+	Err(e) => {
+	    eprintln!("An error occurred. No output written: {}",e);
+	    std::process::exit(1);
+	}
+    }
+    Ok(())
     
 }
