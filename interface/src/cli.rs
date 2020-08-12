@@ -8,8 +8,6 @@ use ndarray;
 use std::sync::Arc;
 use hdf5;
 
-
-
 use s1_noisefloor_engine::interface;
 
 arg_enum! {
@@ -18,7 +16,8 @@ arg_enum! {
 	LinearEst,
 	LinearApply,
 	Raw,
-	LPEst
+	LPEst,
+	LPApply
     }
 }
 
@@ -47,9 +46,10 @@ Note that the engine currently only removes noise floor from cross-pol images.
     the antenna pattern. Parameters are estimated with linear programming. This is the application
     of the method in [].
     Can be applied to both EW and IW GRD mode images.
-    OpMode LpEst, applies estimation and extraction.
+    OpMode LPEst, applies estimation and extraction.
+    OpMode LPApply applies extraction, given parameters
 
-Consists of four different methods (LinearEst, LinearApply, Raw, LPEst).
+Consists of four different methods (LinearEst, LinearApply, Raw, LPEst, LPApply).
 Allows usage of postprocessing routines for multilooking, converting to amplitude, etc.
 Outputs results into an hdf5 file, with groups
 x -> processed crosspol
@@ -80,6 +80,11 @@ LpEst:
      on the characteristics of the original image and the 
      Returns the values back in square intensity units.
 
+LpApply:
+     Applies the power function noise floor obtained from linear programming,
+     with parameters given by the user.
+     Returns the values back in square intensity units.
+
 ")
 	     .required(true)
 	     .possible_values(&OpModes::variants()))
@@ -107,10 +112,7 @@ LpEst:
 	     .takes_value(true)
 	     .required(false))
 	.get_matches();
-    // .arg(Arg::with_name("k")
-    //      .short("k")
-    //      .help("Comma seperated values for linear scalars to apply")
-    //      .required(false)).get_matches();
+
     
 
     let config:Option<&str> = matches.value_of("config");
@@ -134,7 +136,8 @@ LpEst:
 	    OpModes::LinearEst => {linear_get_dualpol_data(sarpath, outf, config)?;},
 	    OpModes::LinearApply => {linear_get_customscale_data(sarpath, outf, paramhdf)?;},
 	    OpModes::Raw => {linear_get_raw_data(sarpath, outf)?;},
-	    OpModes::LPEst => {lp_get_dualpol_data(sarpath, outf, lstsq_rescale, config)?;}//{lp_get_dualpol_data();}
+	    OpModes::LPEst => {lp_get_dualpol_data(sarpath, outf, lstsq_rescale, config)?;},
+	    OpModes::LPApply => {lp_get_customscale_data(sarpath, outf, paramhdf, config)?;}
 	},
 	Err(e) => {
 	    eprintln!("Cannot open HDF5 file: {:?}.", e);
@@ -280,14 +283,16 @@ fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, confi
     check_link!(outf,"copol");
     check_link!(outf,"m");
     check_link!(outf,"b");
+    check_link!(outf,"k");
     check_link!(outf,"subswaths");
     
     match interface::lp_get_dualpol_data(archpath, lstsq_rescale, &lin_param, lp_param) {
-	Ok((xv, co16, params)) => {
+	Ok((xv, co16, params, k)) => {
 	    let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
 	    let xview = xout.to_ndarray();
 	    write_arrayf64(&outf, "crosspol", xview)?;
 	    write_arrayu16(&outf, "copol", co16.view())?;
+	    write_arrayf64(&outf, "k", k.view())?;
 	    let m:Vec<f64> = params.iter().map(|i| i.iter()
 				      .map(|j| j.m))
 		.flatten().collect();
@@ -307,5 +312,52 @@ fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, confi
 	}
     }
     Ok(())
+}
+fn read_mb(datafile:&hdf5::File) -> hdf5::Result<(Vec<f64>,Vec<f64>,Vec<u32>)> {
+    let mgroup = datafile.dataset("m")?;
+    let bgroup = datafile.dataset("b")?;
+    let sgroup = datafile.dataset("subswaths")?;
+    Ok((mgroup.read_1d::<f64>()?.to_vec(),
+	bgroup.read_1d::<f64>()?.to_vec(),
+	sgroup.read_1d::<u32>()?.to_vec()))
+}
+fn lp_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result<hdf5::File>, config:Option<&str>) -> hdf5::Result<()> {
+
+    let lp_param:HyperParams = match config{
+	Some(s) => {
+	    match HyperParams::parse_config(&s) {
+		Ok(d) => d,
+		Err(e) => {
+		    eprintln!("Error parsing config: {}",e);
+		    std::process::exit(1);
+		}
+	    }
+	}
+	None => {
+	    println!("Could not parse config path or was not provided. Using default.");
+	    HyperParams::default()
+	}
+    };
+    check_link!(outf,"crosspol");
+    check_link!(outf,"copol");
     
+    // Find the scale data in the datafile
+    let df = datafile?;
+    let (m,b, num_subswaths) = read_mb(&df)?;
+
+    match interface::lp_get_customscale_data(archpath, m, b, num_subswaths[0] as usize, lp_param) {
+	Ok((xv, co16)) => {
+	    let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
+	    let xview = xout.to_ndarray();
+	    write_arrayf64(&outf, "crosspol", xview)?;
+	    write_arrayu16(&outf, "copol", co16.view())?;
+	},
+	
+	Err(e) => {
+	    eprintln!("An error occurred. No output written: {}",e);
+	    std::process::exit(1);
+	}
+    }
+	
+    Ok(())
 }

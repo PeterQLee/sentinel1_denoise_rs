@@ -8,10 +8,12 @@ use crate::est_lp;
 use std::sync::Arc;
 use crate::prep_lp::*;
 
-pub fn linear_get_dualpol_data(zippath:&str, linpar:&LinearConfig) 
+
+
+pub fn linear_get_dualpol_data(archpath:&str, linpar:&LinearConfig) 
 			       -> Result<(Array2<f64>, Array2<u16>, Array1<f64>), String>
 {
-    let archout = get_data_from_zip_path(zippath, true)?;
+    let archout = get_data_from_zip_path(archpath, true)?;
     
     match archout {
         SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
@@ -36,11 +38,11 @@ pub fn linear_get_dualpol_data(zippath:&str, linpar:&LinearConfig)
 }
 
 
-pub fn linear_get_customscale_data(zippath:&str, k:ArrayView1<f64>)
+pub fn linear_get_customscale_data(archpath:&str, k:ArrayView1<f64>)
 				   -> Result<(Array2<f64>, Array2<u16>), String>
 {
 
-    let archout = get_data_from_zip_path(zippath, true)?;
+    let archout = get_data_from_zip_path(archpath, true)?;
     match archout {
         SentinelArchiveOutput::BothPolOutput(swath_bounds, _w, mut noisefield, x16, co16, _lpargs) => {
             let y = noisefield.data.view_mut();
@@ -58,10 +60,10 @@ pub fn linear_get_customscale_data(zippath:&str, k:ArrayView1<f64>)
     return Err("Error parsing archive".into());
 }
 
-pub fn linear_get_raw_data( zippath:&str)
+pub fn linear_get_raw_data( archpath:&str)
 			    -> Result<(Array2<u16>, Array2<u16>, Array2<f64>), String> {
     
-    let archout = get_data_from_zip_path(zippath, true)?;
+    let archout = get_data_from_zip_path(archpath, true)?;
     match archout {
         SentinelArchiveOutput::BothPolOutput(_swath_bounds, _w, noisefield, x16, co16, _lpargs) => {
             let y = noisefield.data;
@@ -73,9 +75,9 @@ pub fn linear_get_raw_data( zippath:&str)
 }    
 
 
-pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfig, hp:HyperParams)
-			   -> Result<(Arc<TwoDArray>, Array2<u16>, Vec<Vec<est_lp::lin_params>>), String>{
-    let archout = get_data_from_zip_path(zippath, true)?;
+pub fn lp_get_dualpol_data(archpath:&str, lstsq_rescale:bool, linpar:&LinearConfig, hp:HyperParams)
+			   -> Result<(Arc<TwoDArray>, Array2<u16>, Vec<Vec<est_lp::lin_params>>, Array1<f64>), String>{
+    let archout = get_data_from_zip_path(archpath, true)?;
 
     match archout {
         SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, lpargs) => {
@@ -161,12 +163,87 @@ pub fn lp_get_dualpol_data(zippath:&str, lstsq_rescale:bool, linpar:&LinearConfi
 				  &lpargs.id);
 	    
 	    
-	    return Ok((xv, co16, params));
+	    return Ok((xv, co16, params, k));
         },
         _ => {}
     }
     return Err("Error parsing archive".into());
 }
 
-pub fn lp_get_customscale_data() {
+pub fn lp_get_customscale_data(archpath:&str, m:Vec<f64>,
+			       b:Vec<f64>, num_subswaths:usize,
+			       hp:HyperParams) -> Result<(Arc<TwoDArray>, Array2<u16>), String> {
+    let archout = get_data_from_zip_path(archpath, true)?;
+    match archout {
+        SentinelArchiveOutput::BothPolOutput(swath_bounds, _w, mut noisefield, x16, co16, lpargs) => {
+	    let mv:Array2<f64>;
+	    {
+		let y_ = noisefield.data.view_mut();
+		mv = prep_measurement(x16.view(), y_);
+	    }
+	    
+            let x = mv.clone();
+	    let xv = Arc::new(TwoDArray::from_ndarray(x));
+
+
+	    let hyper:Arc<HyperParams> = Arc::new(hp);
+
+	    // construct params
+	    let sb = Arc::new(swath_bounds);
+	    let params = params_from_vecs(m, b, num_subswaths);
+	    
+	    //compute weights
+	    let w_vec = LpApply::compute_weights_for_affine(
+		&xv,
+		&lpargs.bt,
+		hyper.clone(),
+		&lpargs.id);
+	    
+	    LpApply::apply_lp_noisefield(xv.clone(),
+					 lpargs.az_noise.clone(),
+					 lpargs.eval_mp_dict,
+					 &lpargs.bt,
+					 &lpargs.eval_split_indices,
+					 sb.clone(),
+					 &params,
+					 hyper.clone(),
+					 &lpargs.id);
+   	    
+	    LpApply::apply_affine(xv.clone(),
+				  w_vec,
+				  &lpargs.bt,
+				  sb,
+				  hyper.clone(),
+				  &lpargs.id);
+	    return Ok((xv, co16));
+
+	},
+	_ => {}
+    }
+    return Err("Error parsing archive".into());
+}
+
+
+fn params_from_vecs(m:Vec<f64>, b:Vec<f64>, num_subswaths:usize) -> Vec<Vec<est_lp::lin_params>> {
+    match num_subswaths {
+	5 => { //EW mode
+	    let num_p:&[usize] = &[4,2,2,2,2];
+	    let cumu:&[usize] = &[0,4,6,8,10];
+	    num_p.iter().zip(cumu.iter())
+		.map(|x| m[*x.1..*x.1+*x.0].iter()
+		     .zip(b[*x.1..*x.1+*x.0].iter())
+		     .map(|y| est_lp::lin_params{m:*y.0, b:*y.1})
+		     .collect()).collect()
+	},
+	3 =>  { //IW mode
+	    let num_p:&[usize] = &[2,2,2];
+	    let cumu:&[usize] = &[0,2,4];
+	    num_p.iter().zip(cumu.iter())
+		.map(|x| m[*x.1..*x.1+*x.0].iter()
+		     .zip(b[*x.1..*x.1+*x.0].iter())
+		     .map(|y| est_lp::lin_params{m:*y.0, b:*y.1})
+		     .collect()).collect()
+	},
+	_ => {panic!("Invalid number of subswaths")}
+    }
 }

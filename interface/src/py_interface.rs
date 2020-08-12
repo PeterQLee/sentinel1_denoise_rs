@@ -202,6 +202,8 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///    Array of slope / exponent parameters estimated.
     /// b: ndarray(1)
     ///    Array of intercept parameters estimated
+    /// k: ndarray(1)
+    ///    Array of linear scales computed by prior to applying the LP.
     #[pyfn(m, "lp_get_dualpol_data")]
     fn lp_get_dualpol_data<'p>(__py:Python<'p>,
 			       archpath:&str,
@@ -210,7 +212,9 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 			   -> PyResult<(Py<PyArray2<f64>>,
 					Py<PyArray2<u16>>,
 					&'p PyList,
-					&'p PyList)>
+					&'p PyList,
+					Py<PyArray1<f64>>
+			       )>
     {
 	// let cfgpath:PyResult<_> = PyString::from_object(
 	//     config_path,
@@ -244,12 +248,13 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 
 	    
        match interface::lp_get_dualpol_data(archpath, lstsq_rescale, &lin_param, lp_param) {
-	   Ok((xv, co16, params)) => {
+	   Ok((xv, co16, params, k)) => {
 
 	       let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
 	       let xview = xout.to_ndarray();
                let py_cross = PyArray::from_array(__py, &xview).to_owned();
                let py_co = PyArray::from_array(__py, &co16).to_owned();
+	       let py_k = PyArray::from_array(__py, &k).to_owned();
 
 	       
 	       // convert lp params to vectors and outputs
@@ -261,7 +266,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 						 .map(|j| j.b))));
 	       
 	       
-	       return Ok((py_cross, py_co, m, b));
+	       return Ok((py_cross, py_co, m, b, py_k));
 	       
             },
 	    Err(e) => {
