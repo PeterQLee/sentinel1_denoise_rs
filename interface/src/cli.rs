@@ -58,7 +58,7 @@ k -> estimated values of linear model,
 m -> estimated slope parameters for LP method
 b -> estimated intercept parameters for LP method
 ")
-	.arg(Arg::with_name("OpMode")
+	.arg(Arg::with_name("opmode")
 	     .help("Operational mode.
 
 
@@ -88,20 +88,20 @@ LpApply:
 ")
 	     .required(true)
 	     .possible_values(&OpModes::variants()))
-	.arg(Arg::with_name("InputSAR")
+	.arg(Arg::with_name("inputsar")
 	     .help("Input SAR archive or directory")
 	     .value_name("FILE")
 	     .required(true))
-	.arg(Arg::with_name("OutputHDF")
+	.arg(Arg::with_name("outputhdf")
 	     .help("Output hdf5 file")
 	     .required(true))
     	.arg(Arg::with_name("config")
 	     .short("c")
 	     .takes_value(true)
 	     .value_name("Config")
-	     .help("Configuration file for default arguments to the algorithm and solvers")
+	     .help("Configuration .ini file for default arguments to the algorithm and solvers")
 	     .required(false))
-	.arg(Arg::with_name("ParamHDF")
+	.arg(Arg::with_name("paramhdf")
 	     .short("p")
 	     .help("HDF5 archive holding the parameters you want to apply for overriding the method\nOnly required for LinearApply")
 	     .takes_value(true)
@@ -116,10 +116,10 @@ LpApply:
     
 
     let config:Option<&str> = matches.value_of("config");
-    let paramhdf_s:Option<&str> = matches.value_of("ParamHDF");
-    let opmode:OpModes = value_t!(matches.value_of("OpMode"), OpModes).unwrap_or_else(|e| e.exit());
-    let out_path:&str = matches.value_of("OutputHDF").unwrap();
-    let sarpath:&str = matches.value_of("InputSAR").unwrap();
+    let paramhdf_s:Option<&str> = matches.value_of("paramhdf");
+    let opmode:OpModes = value_t!(matches.value_of("opmode"), OpModes).unwrap_or_else(|e| e.exit());
+    let out_path:&str = matches.value_of("outputhdf").unwrap();
+    let sarpath:&str = matches.value_of("inputsar").unwrap();
 
 
     let lstsq_rescale:bool = value_t!(matches.value_of("lstsq_rescale"), bool).unwrap_or_else(|_e| {true});
@@ -128,7 +128,7 @@ LpApply:
 
     let paramhdf:hdf5::Result<hdf5::File> = match paramhdf_s{
 	Some(s) => hdf5::File::open(s),
-	None => Err(hdf5::Error::Internal(format!("Could not open parameter file")))
+	None => Err(hdf5::Error::Internal(format!("Could not open parameter file. You must specify an HDF5 files using the -p option.")))
     };
 
     match check_path(out_path){
