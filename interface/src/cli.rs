@@ -34,7 +34,6 @@ Noise floor removal engine for Sentinel-1
 Two types of noise removal methods are available.
 Note that the engine currently only removes noise floor from cross-pol images.
 
-
  1. A linear noise floor removal method that rescales the ESA provided noise floor
     that is provided in each Sentinel-1 product. This is the application of the method in
     P. Q. Lee, L. Xu, D. A. Clausi. 2020. Sentinel-1 additive noise removal from cross-polarization extra-wide TOPSAR with dynamic least-squares. Remote Sensing of Environment. 248. https://doi.org/10.1016/j.rse.2020.111982
@@ -61,26 +60,25 @@ b -> estimated intercept parameters for LP method
 	.arg(Arg::with_name("opmode")
 	     .help("Operational mode.
 
+  LinearEst:
+    Applies the lstsquares estimation method to retrieve scaling parameters, k,
+    rescales the noise floor, y, and subtracts it from the image, x.
+    Returns the values back in square intensity units.
 
-LinearEst:
-  Applies the lstsquares estimation method to retrieve scaling parameters, k,
-  rescales the noise floor, y, and subtracts it from the image, x.
-  Returns the values back in square intensity units.
+  LinearApply:
+     Applies the linear scaling method using custom user provided scales, k.
+     Returns the values back in square intensity units.
 
-LinearApply:
-   Applies the linear scaling method using custom user provided scales, k.
-   Returns the values back in square intensity units.
-
-Raw:
+  Raw:
      Returns the original cross pol, co pol, and noise field from the archive.
      Note that arrays are in linear units.
 
-LpEst:
+  LpEst:
      Applies the linear programming method to restimate a noise floor based
      on the characteristics of the original image and the 
      Returns the values back in square intensity units.
 
-LpApply:
+  LpApply:
      Applies the power function noise floor obtained from linear programming,
      with parameters given by the user.
      Returns the values back in square intensity units.
@@ -98,7 +96,6 @@ LpApply:
     	.arg(Arg::with_name("config")
 	     .short("c")
 	     .takes_value(true)
-	     .value_name("Config")
 	     .help("Configuration .ini file for default arguments to the algorithm and solvers")
 	     .required(false))
 	.arg(Arg::with_name("paramhdf")
