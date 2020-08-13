@@ -32,14 +32,14 @@ fn check_path(path:&str) -> hdf5::Result<hdf5::File> {
 type Ml = (usize,usize,usize);
 /// Parse multilooking options
 fn parse_multi(a:Option<&str>) -> Option<Ml>{
-    let re = Regex::new(r"^(\d+),(\d+),(\d+)$").unwrap();
+    let re = Regex::new(r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$").unwrap();
     match a {
 	Some(s) => {
 	    match re.captures(s) {
 		Some(v) => {
-		    Some((v.get(0).unwrap().as_str().parse::<usize>().unwrap(),
-			  v.get(1).unwrap().as_str().parse::<usize>().unwrap(),
-			  v.get(2).unwrap().as_str().parse::<usize>().unwrap()))
+		    Some((v.get(1).unwrap().as_str().parse::<usize>().unwrap(),
+			  v.get(2).unwrap().as_str().parse::<usize>().unwrap(),
+			  v.get(3).unwrap().as_str().parse::<usize>().unwrap()))
 		},
 		None => None
 	    }
