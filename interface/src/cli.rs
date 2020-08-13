@@ -7,8 +7,11 @@ use clap::{Arg, App};
 use ndarray;
 use std::sync::Arc;
 use hdf5;
+use regex::Regex;
 
 use s1_noisefloor_engine::interface;
+use s1_noisefloor_engine::postprocess;
+use s1_noisefloor_engine::prep_lp;
 
 arg_enum! {
     #[derive(Debug)]
@@ -23,6 +26,26 @@ arg_enum! {
 
 fn check_path(path:&str) -> hdf5::Result<hdf5::File> {
     hdf5::File::create(path)
+}
+
+
+type Ml = (usize,usize,usize);
+/// Parse multilooking options
+fn parse_multi(a:Option<&str>) -> Option<Ml>{
+    let re = Regex::new(r"^(\d+),(\d+),(\d+)$").unwrap();
+    match a {
+	Some(s) => {
+	    match re.captures(s) {
+		Some(v) => {
+		    Some((v.get(0).unwrap().as_str().parse::<usize>().unwrap(),
+			  v.get(1).unwrap().as_str().parse::<usize>().unwrap(),
+			  v.get(2).unwrap().as_str().parse::<usize>().unwrap()))
+		},
+		None => None
+	    }
+	},
+	None => None
+    }
 }
 
 fn main() -> hdf5::Result<()> {
@@ -88,7 +111,6 @@ b -> estimated intercept parameters for LP method
 	     .possible_values(&OpModes::variants()))
 	.arg(Arg::with_name("inputsar")
 	     .help("Input SAR archive or directory")
-	     .value_name("FILE")
 	     .required(true))
 	.arg(Arg::with_name("outputhdf")
 	     .help("Output hdf5 file")
@@ -108,6 +130,14 @@ b -> estimated intercept parameters for LP method
 	     .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true")
 	     .takes_value(true)
 	     .required(false))
+	.arg(Arg::with_name("multilook")
+	      .short("m")
+	      .help("Apply multilook processing to all output images.
+This ensures that all units are linear and that all measurements > 0.
+Supply comma seperated integers for the amount of multilooking over 
+row,col,num_cores (e.g. \"-m 16,16,8\" - for 16x16 multilooking using 8 processor cores)")
+	      .takes_value(true)
+	      .required(false))
 	.get_matches();
 
     
@@ -117,6 +147,7 @@ b -> estimated intercept parameters for LP method
     let opmode:OpModes = value_t!(matches.value_of("opmode"), OpModes).unwrap_or_else(|e| e.exit());
     let out_path:&str = matches.value_of("outputhdf").unwrap();
     let sarpath:&str = matches.value_of("inputsar").unwrap();
+    let multilook:Option<Ml> = parse_multi(matches.value_of("multilook"));
 
 
     let lstsq_rescale:bool = value_t!(matches.value_of("lstsq_rescale"), bool).unwrap_or_else(|_e| {true});
@@ -130,11 +161,11 @@ b -> estimated intercept parameters for LP method
 
     match check_path(out_path){
 	Ok(outf) =>  match opmode {
-	    OpModes::LinearEst => {linear_get_dualpol_data(sarpath, outf, config)?;},
-	    OpModes::LinearApply => {linear_get_customscale_data(sarpath, outf, paramhdf)?;},
-	    OpModes::Raw => {linear_get_raw_data(sarpath, outf)?;},
-	    OpModes::LPEst => {lp_get_dualpol_data(sarpath, outf, lstsq_rescale, config)?;},
-	    OpModes::LPApply => {lp_get_customscale_data(sarpath, outf, paramhdf, config)?;}
+	    OpModes::LinearEst => {linear_get_dualpol_data(sarpath, outf, config, multilook)?;},
+	    OpModes::LinearApply => {linear_get_customscale_data(sarpath, outf, paramhdf, multilook)?;},
+	    OpModes::Raw => {linear_get_raw_data(sarpath, outf, multilook)?;},
+	    OpModes::LPEst => {lp_get_dualpol_data(sarpath, outf, lstsq_rescale, config, multilook)?;},
+	    OpModes::LPApply => {lp_get_customscale_data(sarpath, outf, paramhdf, config, multilook)?;}
 	},
 	Err(e) => {
 	    eprintln!("Cannot open HDF5 file: {:?}.", e);
@@ -148,21 +179,45 @@ b -> estimated intercept parameters for LP method
 
 
 
-fn write_arrayf64<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:ndarray::ArrayView<f64, D>) -> hdf5::Result<()>
+fn write_arrayf64<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:ndarray::ArrayView<f64, D>, multilook:Option<Ml>) -> hdf5::Result<()>
 
 {
-    let s = arr.shape().to_vec();
-    let group = outf.new_dataset::<f64>().create(fieldname, &s)?;
-    group.write(arr)?;
+    match multilook {
+	None => {
+	    let s = arr.shape().to_vec();
+	    let group = outf.new_dataset::<f64>().create(fieldname, &s)?;
+	    group.write(arr)?;
+	}
+	Some((r, c, cores)) => {
+	    let s = arr.shape().to_vec();
+	    let d = arr.to_slice().unwrap().to_vec();
+	    let xv = Arc::new(prep_lp::TwoDArray::from_vec(d, s[0], s[1]));
+	    let out = postprocess::multilook_and_floor(xv, r, c, cores);
+	    let group = outf.new_dataset::<f64>().create(fieldname, &[out.rows, out.cols])?;
+	    group.write(out.to_ndarray())?;
+	}
+    }
     Ok(())
 }
 
-fn write_arrayu16<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:ndarray::ArrayView<u16, D>) -> hdf5::Result<()>
+fn write_arrayu16<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:ndarray::ArrayView<u16, D>, multilook:Option<Ml>) -> hdf5::Result<()>
 
 {
-    let s = arr.shape().to_vec();
-    let group = outf.new_dataset::<u16>().create(fieldname, &s)?;
-    group.write(arr)?;
+    match multilook {
+	None => {
+	    let s = arr.shape().to_vec();
+	    let group = outf.new_dataset::<u16>().create(fieldname, &s)?;
+	    group.write(arr)?;
+	}
+	Some((r, c, cores)) => {
+	    let s = arr.shape().to_vec();
+	    let d = arr.to_slice().unwrap().iter().map(|x| *x as f64).collect();
+	    let xv = Arc::new(prep_lp::TwoDArray::from_vec(d, s[0], s[1]));
+	    let out = postprocess::multilook_and_floor(xv, r, c, cores);
+	    let group = outf.new_dataset::<f64>().create(fieldname, &[out.rows, out.cols])?;
+	    group.write(out.to_ndarray())?;
+	}
+    }
     Ok(())
 }
 
@@ -174,7 +229,7 @@ macro_rules! check_link {
     }	
 }
 
-fn linear_get_dualpol_data(archpath:&str, outf:hdf5::File, config:Option<&str>) -> hdf5::Result<()> {
+fn linear_get_dualpol_data(archpath:&str, outf:hdf5::File, config:Option<&str>, multilook:Option<Ml>) -> hdf5::Result<()> {
     let lin_param:LinearConfig = match config {
 	Some(s) =>  match LinearConfig::parse_config(s) {
 	    Ok(d) => d,
@@ -194,9 +249,9 @@ fn linear_get_dualpol_data(archpath:&str, outf:hdf5::File, config:Option<&str>) 
     match interface::linear_get_dualpol_data(archpath, &lin_param) {
 	Ok((x, co16, k)) => {
 	    //write output directories.
-	    write_arrayf64(&outf, "crosspol", x.view())?;
-	    write_arrayu16(&outf, "copol", co16.view())?;
-	    write_arrayf64(&outf, "k", k.view())?;
+	    write_arrayf64(&outf, "crosspol", x.view(), multilook)?;
+	    write_arrayu16(&outf, "copol", co16.view(), multilook)?;
+	    write_arrayf64(&outf, "k", k.view(), None)?;
 	},
 	 Err(e) => {
 	     eprintln!("An error occurred. No output written: {}",e);
@@ -211,7 +266,7 @@ fn read_k(datafile:&hdf5::File) -> hdf5::Result<ndarray::Array1<f64>> {
     kgroup.read_1d::<f64>()
 }
 
-fn linear_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result<hdf5::File>) -> hdf5::Result<()> {
+fn linear_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result<hdf5::File>, multilook:Option<Ml>) -> hdf5::Result<()> {
     // ensure that none of these groups exist.
     check_link!(outf,"crosspol");
     check_link!(outf,"copol");
@@ -222,8 +277,8 @@ fn linear_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Re
     
     match interface::linear_get_customscale_data(archpath, k.view()) {
 	Ok((x, co16)) => {
-	    write_arrayf64(&outf, "crosspol", x.view())?;
-	    write_arrayu16(&outf, "copol", co16.view())?;
+	    write_arrayf64(&outf, "crosspol", x.view(), multilook)?;
+	    write_arrayu16(&outf, "copol", co16.view(), multilook)?;
 	},
 	Err(e) => {
 	     eprintln!("An error occurred. No output written: {}",e);
@@ -233,15 +288,15 @@ fn linear_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Re
     Ok(())
 }
 
-fn linear_get_raw_data(archpath:&str, outf:hdf5::File) -> hdf5::Result<()> {
+fn linear_get_raw_data(archpath:&str, outf:hdf5::File, multilook:Option<Ml>) -> hdf5::Result<()> {
     check_link!(outf,"crosspol");
     check_link!(outf,"copol");
     check_link!(outf,"y");
     match interface::linear_get_raw_data(archpath) {
 	Ok((x, co16, y)) => {
-	    write_arrayu16(&outf, "crosspol", x.view())?;
-	    write_arrayu16(&outf, "copol", co16.view())?;
-	    write_arrayf64(&outf, "y", y.view())?;
+	    write_arrayu16(&outf, "crosspol", x.view(), multilook)?;
+	    write_arrayu16(&outf, "copol", co16.view(), multilook)?;
+	    write_arrayf64(&outf, "y", y.view(), multilook)?;
 	},
 	Err(e) => {
 	     eprintln!("An error occurred. No output written: {}",e);
@@ -251,7 +306,7 @@ fn linear_get_raw_data(archpath:&str, outf:hdf5::File) -> hdf5::Result<()> {
     Ok(())
 }
 
-fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, config:Option<&str>) -> hdf5::Result<()> {
+fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, config:Option<&str>, multilook:Option<Ml>) -> hdf5::Result<()> {
 
 
     let (lin_param, lp_param) = match config{
@@ -287,9 +342,9 @@ fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, confi
 	Ok((xv, co16, params, k)) => {
 	    let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
 	    let xview = xout.to_ndarray();
-	    write_arrayf64(&outf, "crosspol", xview)?;
-	    write_arrayu16(&outf, "copol", co16.view())?;
-	    write_arrayf64(&outf, "k", k.view())?;
+	    write_arrayf64(&outf, "crosspol", xview, multilook)?;
+	    write_arrayu16(&outf, "copol", co16.view(), multilook)?;
+	    write_arrayf64(&outf, "k", k.view(), None)?;
 	    let m:Vec<f64> = params.iter().map(|i| i.iter()
 				      .map(|j| j.m))
 		.flatten().collect();
@@ -298,8 +353,8 @@ fn lp_get_dualpol_data(archpath:&str, outf:hdf5::File, lstsq_rescale:bool, confi
 		.flatten().collect();
 	    let num_ss:u32 = params.len() as u32;
 
-	    write_arrayf64(&outf, "m", ndarray::ArrayView::from(&m))?;
-	    write_arrayf64(&outf, "b", ndarray::ArrayView::from(&b))?;
+	    write_arrayf64(&outf, "m", ndarray::ArrayView::from(&m), None)?;
+	    write_arrayf64(&outf, "b", ndarray::ArrayView::from(&b), None)?;
 	    let group = outf.new_dataset::<u32>().create("subswaths", &[1])?;
 	    group.write(&[num_ss])?;
 	}
@@ -318,7 +373,7 @@ fn read_mb(datafile:&hdf5::File) -> hdf5::Result<(Vec<f64>,Vec<f64>,Vec<u32>)> {
 	bgroup.read_1d::<f64>()?.to_vec(),
 	sgroup.read_1d::<u32>()?.to_vec()))
 }
-fn lp_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result<hdf5::File>, config:Option<&str>) -> hdf5::Result<()> {
+fn lp_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result<hdf5::File>, config:Option<&str>, multilook:Option<Ml>) -> hdf5::Result<()> {
 
     let lp_param:HyperParams = match config{
 	Some(s) => {
@@ -346,8 +401,8 @@ fn lp_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result
 	Ok((xv, co16)) => {
 	    let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
 	    let xview = xout.to_ndarray();
-	    write_arrayf64(&outf, "crosspol", xview)?;
-	    write_arrayu16(&outf, "copol", co16.view())?;
+	    write_arrayf64(&outf, "crosspol", xview, multilook)?;
+	    write_arrayu16(&outf, "copol", co16.view(), multilook)?;
 	},
 	
 	Err(e) => {
