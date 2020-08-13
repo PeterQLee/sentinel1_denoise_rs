@@ -1,85 +1,82 @@
 ///Entry point for denoising zip file from C api
+use std::ptr;
+use s1_noisefloor_engine::parse::{LinearConfig, HyperParams};
+use s1_noisefloor_engine::interface;
+use s1_noisefloor_engine::postprocess;
+use s1_noisefloor_engine::prep_lp;
+use ndarray;
+use std::sync::Arc;
 
-/*
-#[repr(C)] pub struct OutArr {crosspol:*mut libc::c_float,
-                              copol:*mut libc::c_float,
-                              rows:libc::c_int,
-                              cols:libc::c_int}
-
-///Entry point for denoising zip file from C api
-#[no_mangle]
-pub extern fn denoise_zip(path:*const u8, pathlen:libc::c_int) -> OutArr{
-    
-    let lambda_ = &[0.1,0.1,6.75124,2.78253,10.0]; //convert to array
-    let lambda2_ = 1.0;
-    let mu = 1.7899;
-    let gamma = 2.0;
-    // parse the path arguments
-    let zip_path = unsafe {std::slice::from_raw_parts(path, (pathlen as usize)*std::mem::size_of::<u8>())};
-    let zipval = get_data_from_zip_path(std::str::from_utf8(zip_path).unwrap(), true);
-
-    
-    match zipval {
-        Ok(archout) => {
-            match archout {
-                SentinelArchiveOutput::BothPolOutput(swath_bounds, w, mut noisefield, x16, co16, _lpargs) => {
-                    let y = noisefield.data.view_mut();
-                    let mut x = prep_measurement(x16.view(), y);
-
-
-                    let sb:Vec<&[SwathElem]> = swath_bounds.iter().map(|a| a.as_slice()).collect();
-                    
-                    let k = estimate_k_values(x.view(), noisefield.data.view(), &w, &sb, mu, gamma, lambda_, lambda2_);
-                    
-                    //{
-                     //   let mut y = noisefield.data.view_mut();
-                        //restore_scale(x.view_mut(), y);
-                    //}
-                    apply_swath_scale(x.view_mut(), noisefield.data.view(), k.view(), &sb);
-
-                    restore_scale(x.view_mut());
-
-                    let (rows, cols) = x.dim();
-                    assert!(x.is_standard_layout());
-                    let mut crosspol = convert_to_f64_f32(x.view());
-                    let mut copol = convert_to_u16_f32(co16.view());
-                    
-                    let result = OutArr {
-                        crosspol:crosspol.as_mut_ptr(),
-                        copol:copol.as_mut_ptr(),
-                        rows:rows as libc::c_int,
-                        cols:cols as libc::c_int
-                    };
-
-                    std::mem::forget(crosspol);
-                    std::mem::forget(copol);
-
-                    return result;
-                },
-            
-                _ => { println!("File parsed incorrectly");
-                       return OutArr{crosspol:ptr::null::<libc::c_float>() as *mut libc::c_float,
-                                     copol:ptr::null::<libc::c_float>() as *mut libc::c_float,
-                                     rows:0, cols:0};}
-            }
-        },
-        Err(e) => {
-            println!("File parsed incorrectly: {}",e);
-            return OutArr{crosspol:ptr::null::<libc::c_float>() as *mut libc::c_float,
-                          copol:ptr::null::<libc::c_float>() as *mut libc::c_float,
-                          rows:0, cols:0};
-        }
-    }       
-}
-*/
 #[repr(C)]
 /// Struct for holding results from Linear results
 pub struct LinearResult {crosspol:*mut f64,
-				    copol:*mut u16,
-				    k:*mut f64,
-				    rows:libc::c_int,
-				    cols:libc::c_int,
-				    n_subswaths:libc::c_int
+			 copol:*mut u16,
+			 k:*mut f64,
+                         rows:usize,
+                         cols:usize,
+                         n_subswaths:usize
+}
+macro_rules! null_linear {
+    () => {
+        LinearResult{crosspol:ptr::null::<f64>() as *mut f64,
+                     copol:ptr::null::<u16>() as *mut u16,
+                     k:ptr::null::<f64>() as *mut f64,
+                     rows:0, cols:0, n_subswaths:0}
+    }
+}
+
+
+#[repr(C)]
+/// struct for holding raw results.
+pub struct RawResult {
+    crosspol:*mut u16,
+    copol:*mut u16,
+    y:*mut f64,
+    rows:usize,
+    cols:usize
+}
+macro_rules! null_raw {
+    () => {
+        RawResult{crosspol:ptr::null::<u16>() as *mut u16,
+                  copol:ptr::null::<u16>() as *mut u16,
+                  y:ptr::null::<f64>() as *mut f64,
+                  rows:0, cols:0}
+    }
+
+}
+
+#[repr(C)]
+/// Struct for holding results from Linear results
+pub struct LPResult {crosspol:*mut f64,
+                     copol:*mut u16,
+                     k:*mut f64,
+                     m:*mut f64,
+                     b:*mut f64,
+                     rows:usize,
+                     cols:usize,
+                     n_subswaths:usize,
+                     plen:usize
+}
+macro_rules! null_lp {
+    () => { LPResult{crosspol:ptr::null::<f64>() as *mut f64,
+                     copol:ptr::null::<u16>() as *mut u16,
+                     k:ptr::null::<f64>() as *mut f64,
+                     m:ptr::null::<f64>() as *mut f64,
+                     b:ptr::null::<f64>() as *mut f64,
+                     rows:0,
+                     cols:0,
+                     n_subswaths:0,
+                     plen:0}
+    }
+}
+
+#[repr(C)]
+/// Simple array structure for multilook processing
+/// Assumes Row major order, contiguous.
+pub struct SimpleArray2D {
+    data:*mut f64,
+    rows:usize,
+    cols:usize,
 }
 
 
@@ -89,45 +86,394 @@ pub struct LinearResult {crosspol:*mut f64,
 /// Returns the values back in square intensity units.
 /// Parameters:
 ///
-/// zippath: str
+/// path: char*
 ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
-///
+/// pathlen: size_t
+/// configpath: char*
+///     Path to the config ini file.
+/// configpathlen: size_t
 ///
 /// Returns:
 /// Struct of LinearResult. Upon error, all entries will be null.
-pub extern fn linear_get_dualpol_data(path:*const u8, pathlen:libc::c_int) -> LinearResult{
+pub extern fn linear_get_dualpol_data(path:*const u8, pathlen:usize,
+                                      configpath:*const u8, configpathlen:usize)
+                                      -> LinearResult
+{
     // parse the path arguments
-    let zippath = unsafe {std::slice::from_raw_parts(path, (pathlen as usize)*std::mem::size_of::<u8>())};
-    match interface::linear_get_dualpol_data(zippath, &LinearConfig::default()) {
-	Ok((x, co16, k)) => {
-	    // TODO check x and co16 are contigious
-	    let nss = k.len();
-	    let result = LinearResult {
-		crosspol:x.as_mut_ptr(),
-		copol:co16.as_mut_ptr(),
-		k:k.as_mut_ptr(),
-		rows:rows as libc::c_int,
-		cols:cols as libc::c_int,
-		n_subswaths:nss,
-	    };
+    if pathlen == 0 {
+        return null_linear!();
+    }
+    let archpath = std::str::from_utf8(unsafe {std::slice::from_raw_parts(path, (pathlen)*std::mem::size_of::<u8>())}).unwrap();
+    let lin_param = match configpathlen {
+        0 => LinearConfig::default(),
+        _ => {
+            let s = std::str::from_utf8(unsafe {std::slice::from_raw_parts(configpath, (configpathlen)*std::mem::size_of::<u8>())}).unwrap();
+            match LinearConfig::parse_config(s) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Could not parse config {}",e);
+                    return null_linear!();
+                }
+            }
+        }
+    };
 
-	    // Prevent over-freeing. The calling C-function owns these now.
-	    std::mem::forget(x);
-	    std::mem::forget(co16);
-	    std::mem::forget(m);
+    
+    match interface::linear_get_dualpol_data(archpath, &lin_param) {
+        Ok((x, co16, k)) => {
+            // TODO check x and co16 are contigious
+            let nss = k.len();
+            let rows = x.nrows();
+            let cols = x.ncols();
 
-	    return result;
-	},
-	Err(e) => {
-	    eprintln!("{}",e);
-	    return LinearResult{crosspol:ptr::null::<libc::c_float>() as *mut f64,
-				copol:ptr::null::<libc::c_float>() as *mut f64,
-				k:ptr::null::<libc::c_float>() as *mut f64,
-				rows:0, cols:0, n_subswaths:0};
-	}
+            // Prevent over-freeing. The calling C-function owns these now.
+            let mut x_d = std::mem::ManuallyDrop::new(x.into_raw_vec());
+            let mut co16_d = std::mem::ManuallyDrop::new(co16.into_raw_vec());
+            let mut k_d = std::mem::ManuallyDrop::new(k.into_raw_vec());
+            LinearResult {
+                crosspol:x_d.as_mut_ptr(),
+                copol:co16_d.as_mut_ptr(),
+                k:k_d.as_mut_ptr(),
+                rows:rows,
+                cols:cols,
+                n_subswaths:nss,
+            }
+
+        },
+        Err(e) => {
+            eprintln!("{}",e);
+            return LinearResult{crosspol:ptr::null::<libc::c_float>() as *mut f64,
+                                copol:ptr::null::<libc::c_float>() as *mut u16,
+                                k:ptr::null::<libc::c_float>() as *mut f64,
+                                rows:0, cols:0, n_subswaths:0};
+        }
     }
 }
 
-// pub extern fn linear_get_customscale_data(path:*const u8, pathlen:libc::c_int, c_k:*mut f64) -> LinearResult {
+#[no_mangle]
+/// Applies the linear scaling method using custom user provided scales, k.
+/// Returns the values back in square intensity units.
+///
+/// Parameters:
+///
+/// path: char*
+///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+/// pathlen: size_t
+/// 
+/// kp: *double
+///     One dimensional array in 64-bit float that indicates the linear scaling parameters
+///     to apply to each subswath. Length of array must equal five.
+///     To apply the standard ESA noise removal
+/// klen: size_t
+///
+///
+/// Returns:
+/// LinearResult
+pub extern fn linear_get_customscale_data(path:*const u8, pathlen:usize,
+                                          kp:*mut f64, klen:usize) -> LinearResult{
+    if pathlen == 0 {
+        return null_linear!();
+    }
+    let archpath = std::str::from_utf8(unsafe {std::slice::from_raw_parts(path, (pathlen)*std::mem::size_of::<u8>())}).unwrap();
+    let k = unsafe {ndarray::ArrayView::from_shape_ptr(ndarray::Dim([klen]), kp)};
+
+
+    match interface::linear_get_customscale_data(archpath, k) {
+        Ok((x,co16)) => {
+            let rows = x.nrows();
+            let cols = x.ncols();
+            let mut x_d = std::mem::ManuallyDrop::new(x.into_raw_vec());
+            let mut co16_d = std::mem::ManuallyDrop::new(co16.into_raw_vec());
+            LinearResult {
+                crosspol:x_d.as_mut_ptr(),
+                copol:co16_d.as_mut_ptr(),
+                k:kp,
+                rows:rows,
+                cols:cols,
+                n_subswaths:klen,
+            }
+        },
+        Err(e) => {
+            eprintln!("{}",e);
+            return null_linear!();
+        }
+    }
+}
+
+#[no_mangle]
+/// Returns the original cross pol, co pol, and noise field from the archive.
+/// Note that arrays are in linear units.
+///
+/// Parameters:
+///
+/// path: char *
+///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+/// pathlen: size_t
+///
+/// Returns:
+/// RawResult
+pub extern fn linear_get_raw_data(path:*const u8, pathlen:usize) -> RawResult
+{
+    if pathlen == 0 {
+        return null_raw!();
+    }
+    let archpath = std::str::from_utf8(unsafe {std::slice::from_raw_parts(path, (pathlen)*std::mem::size_of::<u8>())}).unwrap();
+
+    match interface::linear_get_raw_data(archpath) {
+        Ok((x, co16, y)) => {
+
+            let rows = x.nrows();
+            let cols = x.ncols();
+            let mut x_d = std::mem::ManuallyDrop::new(x.into_raw_vec());
+            let mut co16_d = std::mem::ManuallyDrop::new(co16.into_raw_vec());
+            let mut y_d = std::mem::ManuallyDrop::new(y.into_raw_vec());
+            
+            RawResult {
+                crosspol:x_d.as_mut_ptr(),
+                copol:co16_d.as_mut_ptr(),
+                y:y_d.as_mut_ptr(),
+                rows:rows,
+                cols:cols,
+            }
+        },
+        Err(e) => {
+            eprintln!("{}",e);
+            return null_raw!();
+        }
+    }
     
-// }
+}
+
+
+
+#[no_mangle]
+/// Applies the linear programming method to restimate a noise floor based
+/// on the characteristics of the original image and the 
+/// Returns the values back in square intensity units.
+///
+/// Parameters:
+///
+/// path: char*
+///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+/// pathlen: size_t
+/// 
+/// lstsq_rescale: unsigned char
+///     Indicate whether you want to apply the least squares method from
+///     linear_get_dualpol_data to get the baseline minimum offset values for
+///     the method. Ignored if product type is IW
+///     >0 for applying the method
+///     =0 to just use the default ESA noise floor for this.
+/// configpath: char *
+/// configpathlen: size_t
+///     set to 0 if there is no config file and you want to use default settings.
+///
+/// Returns:
+/// LPResult
+pub extern fn lp_get_dualpol_data(path:*const u8,
+                       pathlen:usize,
+                       lstsq_rescale:bool,
+                       configpath:*const u8,
+                       configpathlen:usize) -> LPResult
+{
+    if pathlen == 0 {
+        return null_lp!();
+    }
+    let archpath = std::str::from_utf8(unsafe {std::slice::from_raw_parts(path, (pathlen)*std::mem::size_of::<u8>())}).unwrap();
+    
+    let (lin_param, lp_param) = match configpathlen {
+        0 => {println!("Could not parse config path or was not provided. Using default.");
+              (LinearConfig::default(), HyperParams::default())},
+        
+        _ => {
+            let s = std::str::from_utf8(unsafe {std::slice::from_raw_parts(configpath, (configpathlen)*std::mem::size_of::<u8>())}).unwrap();
+            (match LinearConfig::parse_config(&s) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Error parsing config {}",e);
+                    return null_lp!();
+                }
+            }, match HyperParams::parse_config(&s) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Error parsing config {}",e);
+                    return null_lp!();
+                }
+            })
+        }
+    };
+
+    
+    match interface::lp_get_dualpol_data(archpath, lstsq_rescale, &lin_param, lp_param) {
+        Ok((xv, co16, params, k)) => {
+
+            let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
+            //let mut xview = xout.to_ndarray();
+            let m:Vec<f64> = params.iter().map(|i| i.iter()
+                                               .map(|j| j.m))
+                .flatten().collect();
+            let b:Vec<f64> = params.iter().map(|i| i.iter()
+                                               .map(|j| j.b))
+                .flatten().collect();
+            
+            let num_ss = params.len();
+            let plen = m.len();
+
+            let rows = co16.nrows();
+            let cols = co16.ncols();
+
+            // Manually drop memory so no double frees occur.
+            let mut xout_d = std::mem::ManuallyDrop::new(xout);
+            let mut m_d = std::mem::ManuallyDrop::new(m);
+            let mut b_d = std::mem::ManuallyDrop::new(b);
+            let mut k_d = std::mem::ManuallyDrop::new(k.into_raw_vec());
+            let mut co16_d = std::mem::ManuallyDrop::new(co16.into_raw_vec());
+            let ptr = xout_d.to_raw_pointer();
+
+            
+            LPResult {
+                crosspol:ptr,
+                copol:co16_d.as_mut_ptr(),
+                k:k_d.as_mut_ptr(),
+                m:m_d.as_mut_ptr(),
+                b:b_d.as_mut_ptr(),
+                rows:rows,
+                cols:cols,
+                n_subswaths:num_ss,
+                plen:plen
+            }
+            
+            
+            
+        },
+        Err(e) => {
+            eprintln!("{}",e);
+            return null_lp!();
+        }
+    }
+}
+
+
+#[no_mangle]
+///  Applies the power function noise floor obtained from linear programming,
+///   with parameters given by the user.
+/// Returns the values back in square intensity units.
+/// 
+/// Parameters:
+///
+/// archpath: str
+///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+/// m: list
+///     List of slope parameters
+/// b: list
+///     List of intercept parameters.
+/// config_path: str or None
+///     Optional path to config file. If None (or non-string) will use default configuration.
+pub extern fn lp_get_customscale_data(path:*const u8,
+                           pathlen:usize,
+                           m:*mut f64,
+                           b:*mut f64,
+                           plen:usize,
+                           configpath:*const u8,
+                           configpathlen:usize) -> LPResult
+{
+    if pathlen == 0 {
+        return null_lp!();
+    }
+    let archpath = std::str::from_utf8(unsafe {std::slice::from_raw_parts(path, (pathlen)*std::mem::size_of::<u8>())}).unwrap();
+
+
+    let lp_param = match configpathlen {
+        0 => {println!("Could not parse config path or was not provided. Using default.");
+              HyperParams::default()},
+        _ => {
+            let s = std::str::from_utf8(unsafe {std::slice::from_raw_parts(configpath, (configpathlen)*std::mem::size_of::<u8>())}).unwrap();
+            match HyperParams::parse_config(&s) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Error parsing config {}",e);
+                    return null_lp!();
+                }
+            }
+        }
+    };
+
+
+    let num_subswaths:usize = match plen {
+        12 => 5,
+        6 => 3,
+        _ => {
+            eprintln!("Invalid number of parameters");
+            return null_lp!();
+        }
+    };
+    let m_s = unsafe{std::slice::from_raw_parts(m, (plen)*std::mem::size_of::<f64>())};
+    let b_s = unsafe{std::slice::from_raw_parts(b, (plen)*std::mem::size_of::<f64>())};
+    match interface::lp_get_customscale_data(archpath, m_s, b_s, num_subswaths, lp_param) {
+        Ok((xv, co16)) => {
+            let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
+            let rows = xout.rows;
+            let cols = xout.cols;
+            let mut xout_d = std::mem::ManuallyDrop::new(xout);
+            let mut co16_d = std::mem::ManuallyDrop::new(co16.into_raw_vec());
+            let ptr = xout_d.to_raw_pointer();
+            
+            LPResult {
+                crosspol:ptr,
+                copol:co16_d.as_mut_ptr(),
+                k:std::ptr::null::<f64>() as *mut f64,
+                m:m,
+                b:b,
+                rows:rows,
+                cols:cols,
+                n_subswaths:0,
+                plen:plen,
+            }
+
+        },
+        
+        Err(e) => {
+            eprintln!("An error occurred. No output written: {}",e);
+            return null_lp!();
+        }
+    }
+    
+
+}
+
+#[no_mangle]
+/// Applies multilooking to the input image, sets negative values to 0, and
+/// square roots the output values.
+///
+/// Parameters:
+/// x: Input array for multilooking (square units) - SimpleArray2D
+/// row_factor: integer amount to mean reduce row by.
+/// col_factor: integer amount to mean reduce col by.
+/// num_cores: number of multithreading cores to use.
+///
+/// Output:
+/// x : multilooked image (linear units) - SimpleArray2D
+pub extern fn post_multilook_and_floor(x:*mut SimpleArray2D,
+			    row_factor:usize,
+			    col_factor:usize,
+			    num_cores:usize) -> SimpleArray2D {
+    let x_s = unsafe{std::slice::from_raw_parts((*x).data, ((*x).rows*(*x).cols)*std::mem::size_of::<f64>())};
+    let x_v = x_s.to_vec();
+    let xp = Arc::new(prep_lp::TwoDArray::from_vec(x_v,
+						   unsafe{(*x).rows}, unsafe{(*x).cols}));
+    let o = postprocess::multilook_and_floor(xp,
+					     row_factor,
+					     col_factor,
+					     num_cores );
+    let (orow, ocol) = (o.rows, o.cols);
+
+    
+    let mut o_d = std::mem::ManuallyDrop::new(o);
+    let op = o_d.to_raw_pointer();
+    SimpleArray2D {
+	data:op,
+	rows:orow,
+	cols:ocol
+    }
+
+	
+}

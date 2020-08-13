@@ -66,6 +66,16 @@ impl TwoDArray {
 	    };
 	}
     }
+    pub fn to_raw_pointer(&mut self) -> *mut f64 {
+	self.data.as_mut_ptr()
+    }
+    pub fn from_vec(s:Vec<f64>, row:usize, col:usize) -> TwoDArray {
+	TwoDArray {
+	    rows:row,
+	    cols:col,
+	    data:s,
+	}
+    }
     
     pub fn to_ndarray<'a>(&'a self) -> ArrayView<'a, f64, Ix2> {
 	ArrayView::from_shape((self.rows, self.cols),

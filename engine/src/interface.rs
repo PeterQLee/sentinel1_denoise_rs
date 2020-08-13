@@ -170,8 +170,8 @@ pub fn lp_get_dualpol_data(archpath:&str, lstsq_rescale:bool, linpar:&LinearConf
     return Err("Error parsing archive".into());
 }
 
-pub fn lp_get_customscale_data(archpath:&str, m:Vec<f64>,
-			       b:Vec<f64>, num_subswaths:usize,
+pub fn lp_get_customscale_data(archpath:&str, m:&[f64],
+			       b:&[f64], num_subswaths:usize,
 			       hp:HyperParams) -> Result<(Arc<TwoDArray>, Array2<u16>), String> {
     let archout = get_data_from_zip_path(archpath, true)?;
     match archout {
@@ -224,7 +224,7 @@ pub fn lp_get_customscale_data(archpath:&str, m:Vec<f64>,
 }
 
 
-fn params_from_vecs(m:Vec<f64>, b:Vec<f64>, num_subswaths:usize) -> Vec<Vec<est_lp::lin_params>> {
+fn params_from_vecs(m:&[f64], b:&[f64], num_subswaths:usize) -> Vec<Vec<est_lp::lin_params>> {
     match num_subswaths {
 	5 => { //EW mode
 	    let num_p:&[usize] = &[4,2,2,2,2];

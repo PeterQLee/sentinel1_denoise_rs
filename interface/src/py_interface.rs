@@ -1,4 +1,4 @@
-
+/// Python interface to methods.
 use s1_noisefloor_engine::parse::{LinearConfig, HyperParams};
 use s1_noisefloor_engine::interface;
 use s1_noisefloor_engine::postprocess;
@@ -6,14 +6,13 @@ use s1_noisefloor_engine::prep_lp;
 
 
 use numpy::{PyArray, PyArray1, PyArray2};
-//use pyo3::prelude::{Py, pymodule,  PyModule, PyResult, Python, PyObject, FromPyObject};
 use pyo3::prelude::{*};
 use pyo3::{wrap_pyfunction, exceptions};
 use pyo3::types::{PyList, PyString, PyAny};
 
 
 use std::sync::Arc;
-//extern crate lapack_src;
+
 
 
 /// Noise floor removal engine for Sentinel-1
@@ -48,7 +47,8 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///
     /// archpath: str
     ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
-    ///
+    /// config_path: str or None
+    ///     Optional path to config file. If None (or non-string) will use default configuration.
     ///
     /// Returns:
     /// (cross, co, k)
@@ -73,7 +73,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
 		match LinearConfig::parse_config(&s) {
 		    Ok(d) => d,
 		    Err(e) => {
-			println!("Could not parse config {}",e);
+			eprintln!("Could not parse config {}",e);
 			return exceptions::ValueError.into();
 		    }
 		}
@@ -158,19 +158,19 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// y: ndarray(2)
     ///    array holding noise field (linear)
     fn linear_get_raw_data(__py:Python, archpath:&str) -> PyResult<(Py<PyArray2<u16>>, Py<PyArray2<u16>>, Py<PyArray2<f64>>)> {
-	match interface::linear_get_raw_data(archpath) {
-	    Ok((x, co16, y)) => {
+        match interface::linear_get_raw_data(archpath) {
+            Ok((x, co16, y)) => {
                 let py_cross = PyArray::from_array(__py,&x).to_owned();
                 let py_co = PyArray::from_array(__py,&co16).to_owned();
-		let py_y = PyArray::from_array(__py,&y).to_owned();
+                let py_y = PyArray::from_array(__py,&y).to_owned();
                 return Ok((py_cross, py_co, py_y));
 
             },
-	    Err(e) => {
-		eprintln!("{}",e);
-		return exceptions::ValueError.into();
-	    }
-	}
+            Err(e) => {
+                eprintln!("{}",e);
+                return exceptions::ValueError.into();
+            }
+        }
 
     }
 
@@ -188,7 +188,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///     the method. Ignored if product type is 
     ///     true for applying the method
     ///     false to just use the default ESA noise floor for this.
-    /// config_path: str (optional)
+    /// config_path: str or None
     ///     Optional path to config file. If None (or non-string) will use default configuration.
     ///
     /// Returns:
@@ -206,82 +206,142 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     ///    Array of linear scales computed by prior to applying the LP.
     #[pyfn(m, "lp_get_dualpol_data")]
     fn lp_get_dualpol_data<'p>(__py:Python<'p>,
-			       archpath:&str,
-			       lstsq_rescale:bool,
-			       config_path:&PyAny)
-			   -> PyResult<(Py<PyArray2<f64>>,
-					Py<PyArray2<u16>>,
-					&'p PyList,
-					&'p PyList,
-					Py<PyArray1<f64>>
-			       )>
+                               archpath:&str,
+                               lstsq_rescale:bool,
+                               config_path:&PyAny)
+                           -> PyResult<(Py<PyArray2<f64>>,
+                                        Py<PyArray2<u16>>,
+                                        &'p PyList,
+                                        &'p PyList,
+                                        Py<PyArray1<f64>>
+                               )>
     {
-	// let cfgpath:PyResult<_> = PyString::from_object(
-	//     config_path,
-	//     "utf-8",
-	//     "");
-	//let cfgpath:PyResult<PyString> = config_path.extract();
-	let cfgpath:PyResult<String> = config_path.extract();
-	//let cfgpath:PyResult<PyString> = PyString::extract(config_path);
-	let (lin_param, lp_param) = match cfgpath {
-	    Ok(s) => {
-		//let s = pth.to_string_lossy();
-		(match LinearConfig::parse_config(&s) {
-		    Ok(d) => d,
-		    Err(e) => {
-			println!("Error parsing config {}",e);
-			return exceptions::ValueError.into();
-		    }
-		}, match HyperParams::parse_config(&s) {
-		    Ok(d) => d,
-		    Err(e) => {
-			println!("Error parsing config {}",e);
-			return exceptions::ValueError.into();
-		    }
-		})
-	    }
-	    Err(_e) => {
-		println!("Could not parse config path or was not provided. Using default.");
-		(LinearConfig::default(), HyperParams::default())
-	    }
-	};
+        let cfgpath:PyResult<String> = config_path.extract();
+        let (lin_param, lp_param) = match cfgpath {
+            Ok(s) => {
+                (match LinearConfig::parse_config(&s) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        println!("Error parsing config {}",e);
+                        return exceptions::ValueError.into();
+                    }
+                }, match HyperParams::parse_config(&s) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        println!("Error parsing config {}",e);
+                        return exceptions::ValueError.into();
+                    }
+                })
+            }
+            Err(_e) => {
+                println!("Could not parse config path or was not provided. Using default.");
+                (LinearConfig::default(), HyperParams::default())
+            }
+        };
 
-	    
+            
        match interface::lp_get_dualpol_data(archpath, lstsq_rescale, &lin_param, lp_param) {
-	   Ok((xv, co16, params, k)) => {
+           Ok((xv, co16, params, k)) => {
 
-	       let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
-	       let xview = xout.to_ndarray();
+               let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
+               let xview = xout.to_ndarray();
                let py_cross = PyArray::from_array(__py, &xview).to_owned();
                let py_co = PyArray::from_array(__py, &co16).to_owned();
-	       let py_k = PyArray::from_array(__py, &k).to_owned();
+               let py_k = PyArray::from_array(__py, &k).to_owned();
 
-	       
-	       // convert lp params to vectors and outputs
-	       let m:&PyList = PyList::new(__py, params.iter()
-					   .map(|i| PyList::new(__py, i.iter()
-								.map(|j| j.m))));
-	       let b:&PyList = PyList::new(__py, params.iter()
-			    .map(|i| PyList::new(__py, i.iter()
-						 .map(|j| j.b))));
-	       
-	       
-	       return Ok((py_cross, py_co, m, b, py_k));
-	       
+               
+               // convert lp params to vectors and outputs
+               // let m:&PyList = PyList::new(__py, params.iter()
+               //                                  .map(|i| PyList::new(__py, i.iter()
+               //                                                       .map(|j| j.m))));
+               // let b:&PyList = PyList::new(__py, params.iter()
+               //                   .map(|i| PyList::new(__py, i.iter()
+               //                                        .map(|j| j.b))));
+               let m:&PyList = PyList::new(__py, params.iter()
+                                           .map(|i| i.iter()
+                                                .map(|j| j.m))
+                                           .flatten().collect::<Vec<f64>>());
+               let b:&PyList = PyList::new(__py, params.iter()
+                                           .map(|i| i.iter()
+                                                .map(|j| j.b))
+                                           .flatten().collect::<Vec<f64>>());
+
+               
+               return Ok((py_cross, py_co, m, b, py_k));
+               
             },
-	    Err(e) => {
-		eprintln!("{}",e);
-		return exceptions::ValueError.into();
-	    }
-	}
-			   }
-    /// Applies custom scaling based on provided lp parameters.
-    fn lp_get_customscale_data<'p>(__py:Python<'p>, archpath:&str, lstsq_rescale:bool)
-			   // -> PyResult<(Py<PyArray2<f64>>,
-			   // 		Py<PyArray2<u16>>,
-			   // 		&'p PyList,
-			   // 		&'p PyList
+            Err(e) => {
+                eprintln!("{}",e);
+                return exceptions::ValueError.into();
+            }
+        }
+    }
+    ///  Applies the power function noise floor obtained from linear programming,
+    ///   with parameters given by the user.
+    /// Returns the values back in square intensity units.
+    /// 
+    /// Parameters:
+    ///
+    /// archpath: str
+    ///     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+    /// m: list
+    ///     List of slope parameters
+    /// b: list
+    ///     List of intercept parameters.
+    /// config_path: str or None
+    ///     Optional path to config file. If None (or non-string) will use default configuration.
+    #[pyfn(m, "lp_get_customscale_data")]
+    fn lp_get_customscale_data<'p>(__py:Python<'p>, archpath:&str,
+                                   m:Vec<f64>,
+                                   b:Vec<f64>,
+                                   config_path:&PyAny)
+                            -> PyResult<(Py<PyArray2<f64>>,
+                                        Py<PyArray2<u16>>)>
     {
+        let cfgpath:PyResult<String> = config_path.extract();
+        let lp_param = match cfgpath {
+            Ok(s) => {
+                match HyperParams::parse_config(&s) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        println!("Error parsing config {}",e);
+                        return exceptions::ValueError.into();
+                    }
+                }
+            },
+            Err(_e) => {
+                println!("Could not parse config path or was not provided. Using default.");
+                HyperParams::default()
+            }
+        };
+        if m.len() != b.len() {
+            eprintln!("Invalid number of parameters: len(m)!=len(b)");
+            return exceptions::ValueError.into();
+
+        }
+        let num_subswaths:usize = match m.len() {
+            12 => 5,
+            6 => 3,
+            _ => {
+                eprintln!("Invalid number of parameters");
+                return exceptions::ValueError.into();
+            }
+        };
+        match interface::lp_get_customscale_data(archpath, &m, &b, num_subswaths, lp_param) {
+            Ok((xv, co16)) => {
+                let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
+                let xview = xout.to_ndarray();
+                let py_cross = PyArray::from_array(__py, &xview).to_owned();
+                let py_co = PyArray::from_array(__py, &co16).to_owned();
+                return Ok((py_cross, py_co))
+            },
+        
+            Err(e) => {
+                eprintln!("An error occurred. No output written: {}",e);                
+            }
+        }
+            
+        return exceptions::ValueError.into();
     }
 
     /// Applies multilooking to the input image, sets negative values to 0, and
@@ -297,19 +357,19 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     /// x : multilooked image (linear units)
     #[pyfn(m, "post_multilook_and_floor")]
     fn post_multilook_and_floor(__py:Python, py_x:&PyArray2<f64>,
-				row_factor:u64,
-				col_factor:u64,
-				num_cores:u64) -> PyResult<Py<PyArray2<f64>>> {
-	let x = py_x.to_owned_array();
-	let xp = Arc::new(prep_lp::TwoDArray::from_ndarray(x));
-	let o = postprocess::multilook_and_floor(xp,
-						 row_factor as usize,
-						 col_factor as usize,
-						 num_cores as usize);
-	let op = o.to_ndarray();
-	let py_o = PyArray::from_array(__py, &op).to_owned();
-	Ok(py_o)
-	
+                                row_factor:u64,
+                                col_factor:u64,
+                                num_cores:u64) -> PyResult<Py<PyArray2<f64>>> {
+        let x = py_x.to_owned_array();
+        let xp = Arc::new(prep_lp::TwoDArray::from_ndarray(x));
+        let o = postprocess::multilook_and_floor(xp,
+                                                 row_factor as usize,
+                                                 col_factor as usize,
+                                                 num_cores as usize);
+        let op = o.to_ndarray();
+        let py_o = PyArray::from_array(__py, &op).to_owned();
+        Ok(py_o)
+        
     }
 
 
@@ -317,6 +377,7 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(linear_get_customscale_data))?;
     m.add_wrapped(wrap_pyfunction!(linear_get_raw_data))?;
     m.add_wrapped(wrap_pyfunction!(lp_get_dualpol_data))?;
+    m.add_wrapped(wrap_pyfunction!(lp_get_customscale_data))?;
 
     m.add_wrapped(wrap_pyfunction!(post_multilook_and_floor))?;
     Ok(())

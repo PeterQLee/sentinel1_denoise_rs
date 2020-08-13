@@ -13,11 +13,11 @@ use s1_noisefloor_engine::interface;
 arg_enum! {
     #[derive(Debug)]
     pub enum OpModes {
-	LinearEst,
-	LinearApply,
-	Raw,
-	LPEst,
-	LPApply
+        LinearEst,
+        LinearApply,
+        Raw,
+        LPEst,
+        LPApply
     }
 }
 
@@ -27,9 +27,9 @@ fn check_path(path:&str) -> hdf5::Result<hdf5::File> {
 
 fn main() -> hdf5::Result<()> {
     let matches = App::new("Sentinel-1 noisefloor removal")
-	.version("1.0")
-	.author("Peter Q. Lee <pqjlee@uwaterloo.ca>")
-	.about("Sentinel-1 noise floor removal tool. 
+        .version("1.0")
+        .author("Peter Q. Lee <pqjlee@uwaterloo.ca>")
+        .about("Sentinel-1 noise floor removal tool. 
 Noise floor removal engine for Sentinel-1
 Two types of noise removal methods are available.
 Note that the engine currently only removes noise floor from cross-pol images.
@@ -342,7 +342,7 @@ fn lp_get_customscale_data(archpath:&str, outf:hdf5::File, datafile:hdf5::Result
     let df = datafile?;
     let (m,b, num_subswaths) = read_mb(&df)?;
 
-    match interface::lp_get_customscale_data(archpath, m, b, num_subswaths[0] as usize, lp_param) {
+    match interface::lp_get_customscale_data(archpath, &m, &b, num_subswaths[0] as usize, lp_param) {
 	Ok((xv, co16)) => {
 	    let xout = Arc::try_unwrap(xv).expect("Could not unwrap");
 	    let xview = xout.to_ndarray();
