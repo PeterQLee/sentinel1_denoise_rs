@@ -1,5 +1,5 @@
-/// Top level module for preparing measurements for the linear programming implementation.
-/// This is everything up-to the actual program estimation
+//! Top level module for preparing measurements for the linear programming implementation.
+//! This is everything up-to the actual program estimation
 
 use crate::parse::{BurstEntry, TimeRowLut, RawPattern, HyperParams};
 use crate::read_from_archive::SentinelFormatId;
@@ -203,7 +203,7 @@ fn quadratic_spline(x:&[f64], y:&[f64]) -> ArrToArr {
     for i in 0..num_segments {
 	assert!(x_c[i] <= x_c[i+1]);
     }
-    let k = 2;
+    let _k = 2;
 
     // Going to set up a banded matrix to compute the coefficients of the matrix
     // This matrix is setup with 1 upper diagonal and 3 lower diagonals.
@@ -316,12 +316,12 @@ pub enum MidPoint {
 }
 /// Returns a dictionary that provides the antenna values.
 /// Along with indices of where to "split"
-pub fn get_interpolation_pattern (buffer:&str,
+pub fn get_interpolation_pattern (_buffer:&str,
 				  burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 				  time_row_lut:&TimeRowLut,
 				  pat_raw:&RawPattern, id:&SentinelFormatId, eval:bool)
 				  -> (Vec<Vec<ArrToArr>>, MidPoint) {
-    let num_subswaths:usize = get_num_subswath!(id);
+    let _num_subswaths:usize = get_num_subswath!(id);
 
     let mut mp_dict:Vec<Vec<ArrToArr>> = Vec::new(); // vector of closures for pattern value derivation
     let mut test_indices:Vec<Vec<Arc<Vec<(f64,f64)>>>> = Vec::new();
@@ -566,7 +566,7 @@ pub fn select_and_estimate_segments(x:Arc<TwoDArray>, mp_dict:Vec<Vec<ArrToArr>>
 
 		/* Run the threads */
 		let b = thread_handles.len();
-		for i in 0..b {thread_handles.pop().unwrap().join();}
+		for _i in 0..b {thread_handles.pop().unwrap().join().unwrap();}
 
 		/* Calculate the parameters via linear programming. */
 		ret.push(
@@ -605,8 +605,9 @@ fn determine_mino_value(base:Arc<TwoDArray>,
 	}
     }
     minval
-    //minval.max(0.0)
+
 }
+/// Compute the minimum available value from the baseline reference (i.e. default ESA result)
 pub fn compute_mino_list(base:Arc<TwoDArray>,
 			 burst_coords:&Vec<Vec<Arc<BurstEntry>>>,
 			 hyper:Arc<HyperParams>,
@@ -648,46 +649,3 @@ pub fn compute_mino_list(base:Arc<TwoDArray>,
     mino_list
     
 }
-/*
-def square_yoff(x, y, burst_coords, mp_dict, sent_mode = 'EW'):
-    """
-    Selects o to be the minimum denoised value from using x-y standard denoising.
-    Should have more success on arctic scenes since it is better calibrated there.
-    """
-    padding = 40
-    ynoised = denoise._denoise_sim(np.sqrt(np.clip(x,0, x.max())), np.sqrt(np.clip(y, 0, y.max())))
-    N = NUMSUBSWATHS[sent_mode]
-    o_list = [ [] for i in range(N)]
-    
-
-    for e in range(N):
-        swath = SUBSWATH_NAMES[sent_mode][e]
-        c=0
-        for fa_, la_, fr_, lr_ in burst_coords[swath]:
-            la_+=1
-            lr_+=1
-            fa = fa_ + padding
-            la = la_ - padding
-            fr = fr_ + padding
-            lr = lr_ - padding
-
-            real_ = ynoised[fa:la,fr:lr] #?
-
-            real_sum = np.sum(real_, axis=0)
-            real_mean = np.zeros(real_.shape[1])
-
-            rmask = np.all(real_ != 0, axis=0)
-
-            #real_mean[rmask ] = real_sum[rmask] / np.sum(real_ != 0, axis=0)[rmask]
-            real_mean[rmask] = np.mean(real_, axis=0)[rmask]
-            #np.min(real_mean[real_mean>0])
-            if np.all(~(real_mean>0)):
-                s = 0
-            else:
-                s = np.min(real_mean[real_mean>0])
-
-            o_list[e].append(s)
-
-            c+=1
-    return o_list
-*/

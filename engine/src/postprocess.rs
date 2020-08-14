@@ -1,14 +1,14 @@
-/// Routines for post processing the scene (e.g. multilooking, handling negative)
+//! Routines for post processing the scene (e.g. multilooking, handling negative)
 use std::thread;
 use std::sync::{Arc};
 use crate::prep_lp::TwoDArray;
 /// Applies multilook processing and flooring negative input values
 ///
 /// Parameters:
-/// x: array
-/// row_factor: amount to reduce row by: newrow = floor(oldrow/row_factor)
-/// col_factor: amount to reduce col by: newcol = floor(oldrow/col_factor)
-/// num_cores: number of cpus to parallize over.
+/// * `x`- array
+/// * `row_factor`- amount to reduce row by: newrow = floor(oldrow/row_factor)
+/// * `col_factor`- amount to reduce col by: newcol = floor(oldrow/col_factor)
+/// * `num_cores`- number of cpus to parallize over.
 pub fn multilook_and_floor(x:Arc<TwoDArray>, row_factor:usize, col_factor:usize, num_cores:usize) -> TwoDArray {
 
     let newrow = x.rows/row_factor;
@@ -22,14 +22,14 @@ pub fn multilook_and_floor(x:Arc<TwoDArray>, row_factor:usize, col_factor:usize,
 
     let subsum = move |r:&Arc<TwoDArray>,i:usize,j:usize| -> f64 {
 	let mut total = 0.0;
-	let a_end = row_factor;
-	let b_end = col_factor;
-	let norm = 1.0/((a_end*b_end) as f64);
-	for a in 0..a_end {
-	    for b in 0..b_end {
-		total += r[(row_factor*i+a,col_factor*j+b)] * norm;
-	    }
-	}
+        let a_end = row_factor;
+        let b_end = col_factor;
+        let norm = 1.0/((a_end*b_end) as f64);
+        for a in 0..a_end {
+            for b in 0..b_end {
+                total += r[(row_factor*i+a,col_factor*j+b)] * norm;
+            }
+        }
 	return total;
     };
     

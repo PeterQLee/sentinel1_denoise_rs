@@ -1,4 +1,4 @@
-
+//! Methods used to apply and subtract estimated noisefields
 use crate::parse::{SwathElem,BurstEntry, HyperParams};
 use crate::read_from_archive::SentinelFormatId;
 use crate::prep_lp::{ArrToArr, TwoDArray, MidPoint, };
@@ -16,17 +16,17 @@ use std::thread;
 
 macro_rules! get_num_subswath {
     ($sw:expr) => {
-	match $sw.sentmode.as_str() {
-	    "EW" => {5},
-	    "IW" => {3},
-	    _ => panic!("Incorrect sentmode")
-	}
+        match $sw.sentmode.as_str() {
+            "EW" => {5},
+            "IW" => {3},
+            _ => panic!("Incorrect sentmode")
+        }
     }
 }
 
 macro_rules! unpack_bound {
     ($sw:expr) => {
-	($sw.fa, $sw.la, $sw.fr, $sw.lr)
+        ($sw.fa, $sw.la, $sw.fr, $sw.lr)
     }
 }
 
@@ -34,34 +34,34 @@ macro_rules! unpack_bound {
 /// These values were taken from https://sentinel.esa.int/web/sentinel/user-guides/sentinel-1-sar/resolutions/level-1-ground-range-detected
 macro_rules! get_look {
     ($sw:expr) => {
-	match $sw.sentmode.as_str() {
-	    "EW" => {
-		match $sw.quality.as_str() {
-		    "H" => {2.7},
-		    "M" => {10.7},
-		    e => {panic!("Unrecognized image quality {}",e)}
-		}
-	    }
-	    "IW" => {
-		match $sw.quality.as_str() {
-		    "H" => {4.4},
-		    "M" => {81.8},
-		    e => {panic!("Unrecognized image quality {}",e)}
-		}
-	    }
-	    e => {panic!("Unrecognized imaging type {}",e)}
-	}
+        match $sw.sentmode.as_str() {
+            "EW" => {
+                match $sw.quality.as_str() {
+                    "H" => {2.7},
+                    "M" => {10.7},
+                    e => {panic!("Unrecognized image quality {}",e)}
+                }
+            }
+            "IW" => {
+                match $sw.quality.as_str() {
+                    "H" => {4.4},
+                    "M" => {81.8},
+                    e => {panic!("Unrecognized image quality {}",e)}
+                }
+            }
+            e => {panic!("Unrecognized imaging type {}",e)}
+        }
     }
 }
 
 /// Reduce mean along column axes
 fn reduce_col_mean(x:&TwoDArray,
-		fa:usize, la:usize, fr:usize, lr:usize) -> Vec<f64>  {
+                fa:usize, la:usize, fr:usize, lr:usize) -> Vec<f64>  {
     let mut total = vec![0.0;la-fa];
     for i in fa..la {
-	for j in fr..lr {
-	    total[i-fa] += x[(i,j)]/((lr-fr) as f64);
-	}
+        for j in fr..lr {
+            total[i-fa] += x[(i,j)]/((lr-fr) as f64);
+        }
     }
     return total;
 }
@@ -71,9 +71,9 @@ fn reduce_col_mean(x:&TwoDArray,
 ///
 /// Arguments:
 ///
-/// x: Squared signal array
-/// y: noise array
-/// k: array of scaling factors
+/// * `x`- Squared signal array
+/// * `y` noise array
+/// * `k`- array of scaling factors
 pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
                          y:ArrayView2<f64>,
                          k:ArrayView1<f64>,
@@ -88,7 +88,7 @@ pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
             Zip::from(&mut x.slice_mut(s![swth.fa..swth.la+1, swth.fr..swth.lr+1]))
                 .and(y.slice(s![swth.fa..swth.la+1, swth.fr..swth.lr+1]))
             //.par_apply(|x_, y_| {
-		.apply(|x_, y_| {
+                .apply(|x_, y_| {
                     *x_ = (*x_).max(0.0) - ks*y_.max(0.0);
                 });
         }
@@ -96,18 +96,19 @@ pub fn apply_swath_scale(mut x:ArrayViewMut2<f64>,
 }
 
 
-
-pub fn prep_measurement(x:ArrayView2<u16>, mut y:ArrayViewMut2<f64>) -> Array2<f64>{
+/// Prepares square measurements from original image.
+pub fn prep_measurement(x:ArrayView2<u16>, _y:ArrayViewMut2<f64>) -> Array2<f64>{
     let mut result:Array2<f64> = Array2::zeros(x.dim());
 
     Zip::from(&mut result)
         .and(x)
         //.par_apply(|a,b| *a = ((*b as f64) * (*b as f64)));
-	.apply(|a,b| *a = (*b as f64) * (*b as f64));
+        .apply(|a,b| *a = (*b as f64) * (*b as f64));
                
     return result;
 }
 
+/// Apply square root (deprecated)
 pub fn restore_scale(mut x:ArrayViewMut2<f64>) {//, mut y:ArrayViewMut2<f64>)  {
     Zip::from(&mut x)
         .apply(|a| {
@@ -126,7 +127,7 @@ pub fn restore_scale(mut x:ArrayViewMut2<f64>) {//, mut y:ArrayViewMut2<f64>)  {
 }
 
 
-
+/// Convert u16 to f32 array
 pub fn convert_to_u16_f32(x:ArrayView2<u16>) -> Array2<f32>{
     let mut outarr:Array2<f32> = Array2::zeros(x.dim());
 
@@ -136,6 +137,7 @@ pub fn convert_to_u16_f32(x:ArrayView2<u16>) -> Array2<f32>{
     return outarr;
 }
 
+/// Convert f64 to f32 array
 pub fn convert_to_f64_f32(x:ArrayView2<f64>) -> Array2<f32>{
     let mut outarr:Array2<f32> = Array2::zeros(x.dim());
 
@@ -145,7 +147,7 @@ pub fn convert_to_f64_f32(x:ArrayView2<f64>) -> Array2<f32>{
     return outarr;
 }
 
-
+/// Methods for implementing linear programming application
 pub struct LpApply{
 }
 
@@ -153,83 +155,83 @@ pub struct LpApply{
 impl LpApply {
     /// Gets gapless antenna pattern.
     fn get_gapless_ant(fr:usize, lr:usize,
-		       mp:ArrToArr,
-		       midpoint:&Vec<(f64,f64)>,
-		       lin_params:&[crate::est_lp::lin_params]) -> Vec<f64> {
-	let k:Vec<usize> = (fr..lr).collect();
-	let ant = mp(&k);
-	let mut p_ant = vec![0.0;lr-fr];
-	let num_mp = midpoint.len();
+                       mp:ArrToArr,
+                       midpoint:&Vec<(f64,f64)>,
+                       lin_params:&[crate::est_lp::lin_params]) -> Vec<f64> {
+        let k:Vec<usize> = (fr..lr).collect();
+        let ant = mp(&k);
+        let mut p_ant = vec![0.0;lr-fr];
+        let num_mp = midpoint.len();
 
-	for (i,m) in midpoint.iter().enumerate() {
-	    /* determine start and end */
-	    let prev = match i {
-		0 => fr,
-		_ => fr.max(m.0.round() as usize)
-	    };
-	    let nex = lr.min(m.1.round() as usize);
+        for (i,m) in midpoint.iter().enumerate() {
+            /* determine start and end */
+            let prev = match i {
+                0 => fr,
+                _ => fr.max(m.0.round() as usize)
+            };
+            let nex = lr.min(m.1.round() as usize);
 
-	    /* compute p_ant in this undisputed region */
-	    p_ant[prev-fr..nex-fr].iter_mut()
-		.zip(ant[prev-fr..nex-fr].iter())
-		.for_each(|x| *x.0 = lin_params[i].b.exp() * x.1.powf(lin_params[i].m));
+            /* compute p_ant in this undisputed region */
+            p_ant[prev-fr..nex-fr].iter_mut()
+                .zip(ant[prev-fr..nex-fr].iter())
+                .for_each(|x| *x.0 = lin_params[i].b.exp() * x.1.powf(lin_params[i].m));
 
-	    /* Determine in between region*/
-	    if i < num_mp - 1 {
-		let s_nex = lr.min(midpoint[i+1].0.round() as usize);
-		let slope_prog = (nex..s_nex)
-		    .map(|x| {
-			let tot = (s_nex - nex) as f64;
-			let n = (x - nex) as f64;
-			lin_params[i].m*(1.0-n/tot) +
-			    lin_params[i+1].m*n/tot});
-		let int_prog = (nex..s_nex)
-		    .map(|x| {
-			let tot = (s_nex - nex) as f64;
-			let n = (x - nex) as f64;
-			lin_params[i].b*(1.0-n/tot) +
-			    lin_params[i+1].b*n/tot});
-		p_ant[nex-fr..s_nex-fr].iter_mut()
-		    .zip(ant[nex-fr..s_nex-fr].iter()
-			 .zip(slope_prog.zip(int_prog)))
-		.for_each(|x| *x.0 = ((x.1).1).1.exp() * (x.1).0.powf(((x.1).1).0));
-		//.for_each(|x| *x.0 = lin_params[i].b.exp() * (x.1).0.powf(lin_params[i].m));
-	    }
-	}
-	/* Interpolate to lr if appropriate*/
-	let nex = lr.min(midpoint[num_mp-1].1.round() as usize);
-	if nex < lr {
-	    p_ant[nex-fr..lr-fr].iter_mut()
-		.zip(ant[nex-fr..lr-fr].iter())
-		.for_each(|x| *x.0 = lin_params[num_mp-1].b.exp() * x.1.powf(lin_params[num_mp-1].m));
-	}
-	return p_ant;
+            /* Determine in between region*/
+            if i < num_mp - 1 {
+                let s_nex = lr.min(midpoint[i+1].0.round() as usize);
+                let slope_prog = (nex..s_nex)
+                    .map(|x| {
+                        let tot = (s_nex - nex) as f64;
+                        let n = (x - nex) as f64;
+                        lin_params[i].m*(1.0-n/tot) +
+                            lin_params[i+1].m*n/tot});
+                let int_prog = (nex..s_nex)
+                    .map(|x| {
+                        let tot = (s_nex - nex) as f64;
+                        let n = (x - nex) as f64;
+                        lin_params[i].b*(1.0-n/tot) +
+                            lin_params[i+1].b*n/tot});
+                p_ant[nex-fr..s_nex-fr].iter_mut()
+                    .zip(ant[nex-fr..s_nex-fr].iter()
+                         .zip(slope_prog.zip(int_prog)))
+                .for_each(|x| *x.0 = ((x.1).1).1.exp() * (x.1).0.powf(((x.1).1).0));
+                //.for_each(|x| *x.0 = lin_params[i].b.exp() * (x.1).0.powf(lin_params[i].m));
+            }
+        }
+        /* Interpolate to lr if appropriate*/
+        let nex = lr.min(midpoint[num_mp-1].1.round() as usize);
+        if nex < lr {
+            p_ant[nex-fr..lr-fr].iter_mut()
+                .zip(ant[nex-fr..lr-fr].iter())
+                .for_each(|x| *x.0 = lin_params[num_mp-1].b.exp() * x.1.powf(lin_params[num_mp-1].m));
+        }
+        return p_ant;
     }
 
     fn subtract_along_burst(x: &mut TwoDArray,
-			    p_ant:&Vec<f64>,
-			    azimuth_noise:&TwoDArray,
-			    fa:usize,
-			    la:usize,
-			    fr:usize,
-			    lr:usize,
-			    
+                            p_ant:&Vec<f64>,
+                            azimuth_noise:&TwoDArray,
+                            fa:usize,
+                            la:usize,
+                            fr:usize,
+                            lr:usize,
+                            
     ) {
-	for i in fa..la {
-	    for j in fr..lr {
-		x[(i,j)] = x[(i,j)] - p_ant[j-fr] * azimuth_noise[(i,j)];
-	    }
-	}
+        for i in fa..la {
+            for j in fr..lr {
+                x[(i,j)] = x[(i,j)] - p_ant[j-fr] * azimuth_noise[(i,j)];
+            }
+        }
     }
 
 
     /// Applies interior noise removal within threads.
     fn apply_interior(x_v:&mut Arc<TwoDArray>,
-		      x_m:&mut Arc<TwoDArray>,
-		      burst:Arc<BurstEntry>,
-		      next_burst:Option<Arc<BurstEntry>>,
-		      mp:ArrToArr,
-		      sind:Arc<Vec<(f64,f64)>>,
+                      x_m:&mut Arc<TwoDArray>,
+                      burst:Arc<BurstEntry>,
+                      next_burst:Option<Arc<BurstEntry>>,
+                      mp:ArrToArr,
+                      sind:Arc<Vec<(f64,f64)>>,
 		      lin_par:Vec<crate::est_lp::lin_params>,
 		      aznoise:Arc<TwoDArray>,
 		      swath_bounds_:Arc<Vec<Vec<SwathElem>>>,
@@ -318,7 +320,7 @@ impl LpApply {
 			       split_indices:&MidPoint,
 			       swath_bounds:Arc<Vec<Vec<SwathElem>>>,
 			       lin_params:&Vec<Vec<crate::est_lp::lin_params>>,
-			       hyper:Arc<HyperParams>,
+			       _hyper:Arc<HyperParams>,
 			       id:&SentinelFormatId) -> ()
     {
 	let num_subswaths:usize = get_num_subswath!(id);
@@ -581,9 +583,7 @@ impl LpApply {
 	assert!(INFO==0);
 	return b;
     }
-    /*
-def compute_variance_weighted_subswath_offsets(x, reference, swath_bounds, sent_mode = 'EW'):
-*/
+
 }
 
 

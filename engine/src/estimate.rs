@@ -1,11 +1,7 @@
-
+//! Estimation procedures specific to linear method.
 use crate::parse::SwathElem;
-
-
 use ndarray::prelude::*;
 use ndarray::{Array1, Array2, Axis, ArrayViewMut1, ArrayViewMut2, ArrayView1, ArrayView2};
-//use ndarray_linalg::Solve;
-//use ndarray_parallel::prelude::*;
 use ndarray::Zip;
 
 
@@ -27,12 +23,13 @@ fn mean1(x:ArrayView1<f64>, sa:usize, la:usize) -> f64{
         ( ( (la-sa) as f64) )
 }
 
+/*
 ///Mean of 2d array
 fn mean2(x:ArrayView2<f64>, sa:usize, la:usize, sb:usize, lb:usize) -> f64{
     x.slice(s![sa..la, sb..lb])
         .sum() / 
         ( ( (la-sa) as f64) * ( ( lb-sb) as f64) )
-}
+}*/
 
 ///argmin of 1d array
 fn argmin1(x:ArrayView1<f64>, sa:usize, la:usize) -> usize {
@@ -46,16 +43,6 @@ fn argmax1(x:ArrayView1<f64>, sa:usize, la:usize) -> usize {
         .fold((0_usize, -9999999.0), |acc, a| if *a.1 >= acc.1 {(a.0, *a.1)} else {acc} ).0
 }
 
-
-
-
-/*
-pub struct SwathElem {
-    fa:usize,
-    la:usize,
-    fr:usize,
-    lr:usize
-}*/
 
 const EXTENT:usize = 35;
 const NUM_SUBSWATHS:usize = 5;
@@ -79,7 +66,7 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
                      mu:f64,
                      gamma:f64,
                      lambda_:&[f64],
-                     lambda2_:f64) -> Array1<f64>{
+                     _lambda2_:f64) -> Array1<f64>{
 
     // get size of equations
     let n_row_eqs = _num_row_equations(x.dim(), w, swath_bounds);
@@ -160,12 +147,12 @@ pub fn estimate_k_values(x:ArrayView2<f64>,
               &mut INFO);
     }
 
-    return Array1::from_vec(b);
+    return Array1::from(b);
     
 }
                      
 
-fn _num_row_equations(shape:(usize, usize), w:&[usize], swath_bounds:&[&[SwathElem]]) -> usize{
+fn _num_row_equations(_shape:(usize, usize), w:&[usize], swath_bounds:&[&[SwathElem]]) -> usize{
     let mut n = 0;
     for a in 0..swath_bounds.len() {
         let half_period = w[a];
@@ -217,7 +204,7 @@ fn _num_intra_equations(swath_bounds:&[&[SwathElem]]) -> usize{
     
     return tot;
 }
-
+#[allow(non_snake_case)]
 fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
                        mut C:ArrayViewMut2<f64>,
                        x:ArrayView2<f64>,
@@ -231,7 +218,6 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
 
     let mut n = 0;
 
-    //m[:n_row_eqs] = x_row[:,0] - x_row[:,1];
 
 
     for a in 0..NUM_SUBSWATHS {
@@ -244,7 +230,6 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
             .and(y_row.slice(s![n..n+i,0]))
             .and(y_row.slice(s![n..n+i,1]))
             .apply( |m, c, x0, x1, y0, y1| {
-            //.par_apply( |m, c, x0, x1, y0, y1| {
                 let m_ = (x0) - (x1);
                 let c_ = (y0) - (y1);
                 let kratio = c_*m_/(c_*c_);
@@ -255,17 +240,15 @@ fn _fill_row_equations(mut m:ArrayViewMut1<f64>,
                     
             });
         
-        //C[n:n+i, a] = y_row[n:n+i,0] - y_row[n:n+i,1];
-        //kratio[n:n+i] = C[n:n+i,a]*m[n:n+i]/np.square(C[n:n+i,a]);
+
         n+=i;
     }
     
-    // Mask according to ratio
-    //m[:n_row_eqs][(kratio < 0) | (kratio > 2.5)] = 0;
-    //C[:n_row_eqs][(kratio < 0) | (kratio > 2.5)] = 0;
+
 
 }
 
+#[allow(non_snake_case)]
 fn _fill_inter_equations(mut m:ArrayViewMut1<f64>,
                        mut C:ArrayViewMut2<f64>,
                        x:ArrayView2<f64>,
@@ -276,7 +259,7 @@ fn _fill_inter_equations(mut m:ArrayViewMut1<f64>,
 {
     let x_col = _gather_interswathcol(x, swath_bounds);
     let y_col = _gather_interswathcol(y, swath_bounds);
-    let N = _num_inter_equations(swath_bounds);
+    let _N = _num_inter_equations(swath_bounds);
     let mut n=0;
 
     for a in 0..NUM_SUBSWATHS-1 {
@@ -287,9 +270,7 @@ fn _fill_inter_equations(mut m:ArrayViewMut1<f64>,
                 n_add += 4;
             }
         }
-        //m[n_row_eqs + n:n_row_eqs + n + n_add] = mu*(x_col[n:n+n_add,0] - x_col[n:n+n_add,1]);
-        //C[n_row_eqs + n:n_row_eqs + n + n_add, a] = mu*y_col[n:n+n_add,0];
-        //C[n_row_eqs + n:n_row_eqs + n + n_add, a+1] = -mu*y_col[n:n+n_add,1];
+
 
         
         Zip::from(m.slice_mut(s![n_row_eqs + n .. n_row_eqs+ n + n_add]))
@@ -314,6 +295,7 @@ fn _fill_inter_equations(mut m:ArrayViewMut1<f64>,
         n += n_add;
     }
 }
+#[allow(non_snake_case)]
 fn _fill_regularization(mut m:ArrayViewMut1<f64>,
                         mut C:ArrayViewMut2<f64>,
                         n_row_eqs:usize,
@@ -326,6 +308,7 @@ fn _fill_regularization(mut m:ArrayViewMut1<f64>,
     }
 
 }
+#[allow(non_snake_case)]
 fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
                                  mut C:ArrayViewMut2<f64>,
                                  x:ArrayView2<f64>,
@@ -338,7 +321,7 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
     let (x_vals, y_vals) = _gather_intrasubswath(x,y, swath_bounds);
 
     let mut n = 0;
-    let N = _num_intra_equations(swath_bounds);
+    let _N = _num_intra_equations(swath_bounds);
     //kratio = np.zeros(N)
     for a in 0..NUM_SUBSWATHS {
         
@@ -391,7 +374,7 @@ fn _fill_intrasubswath_equations(mut m:ArrayViewMut1<f64>,
 }
 
 
-
+#[allow(non_snake_case)]
 fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_row_eqs:usize) -> (Array2<f64>, Vec<usize>) {
     //TODO: convert using zip/iterator functions.
     let mut n:usize = 0;
@@ -435,7 +418,7 @@ fn _gather_row(x:ArrayView2<f64>, w:&[usize], swath_bounds:&[&[SwathElem]], n_ro
     return (x_row, eq_per_swath);
 }
 
-
+#[allow(non_snake_case)]
 fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Array2<f64> {
    
     let N = _num_inter_equations(swath_bounds);
@@ -471,6 +454,7 @@ fn _gather_interswathcol(x:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> Arr
     return meanvals;
 }
 
+#[allow(non_snake_case)]
 fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[SwathElem]]) -> (Array1<f64>, Array1<f64>) {
     
     let pad = 60;
@@ -484,11 +468,11 @@ fn _gather_intrasubswath(x:ArrayView2<f64>, y:ArrayView2<f64>, swath_bounds:&[&[
         for i in 0..swath_bounds[a].len() {
             let swth = &swath_bounds[a][i];
             // Find the mins and max
-            let n = 0;
+            let _n = 0;
             let vy_ = mean_ax0(y.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1)/NORM;
             
             //np.mean(y[fa:la+1, fr:lr+1], axis = 0);
-            let vx_ = mean_ax0(x.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1)/NORM;
+            //let _vx_ = mean_ax0(x.view(),swth.fa,swth.la+1, swth.fr,swth.lr+1)/NORM;
             //np.mean(x[fa:la+1, fr:lr+1], axis = 0);
 
             if a == 0 {

@@ -1,4 +1,5 @@
 ///Entry point for denoising zip file from C api
+/// Under failure, assume that all elements are null.
 use std::ptr;
 use s1_noisefloor_engine::parse::{LinearConfig, HyperParams};
 use s1_noisefloor_engine::interface;
@@ -9,6 +10,11 @@ use std::sync::Arc;
 
 #[repr(C)]
 /// Struct for holding results from Linear results
+/// crosspol: pointer to crosspol in f64 (square)
+/// copol: pointer to u16
+/// k: pointer to linear scales
+/// rows: # rows in image
+/// cols: # cols in image
 pub struct LinearResult {crosspol:*mut f64,
 			 copol:*mut u16,
 			 k:*mut f64,
@@ -28,6 +34,11 @@ macro_rules! null_linear {
 
 #[repr(C)]
 /// struct for holding raw results.
+/// crosspol: pointer to crosspol in f64 (square)
+/// copol: pointer to u16
+/// y: pointer to noise field.
+/// rows: # rows in image
+/// cols: # cols in image
 pub struct RawResult {
     crosspol:*mut u16,
     copol:*mut u16,
@@ -47,6 +58,15 @@ macro_rules! null_raw {
 
 #[repr(C)]
 /// Struct for holding results from Linear results
+/// crosspol: pointer to crosspol in f64 (square)
+/// copol: pointer to u16
+/// k: pointer to noise field.
+/// m: pointer to slope params
+/// b: pointer to intercept params
+/// rows: # rows in image
+/// cols: # cols in image
+/// n_subswaths: number of subswaths in image.
+/// plen: number of elements in m.
 pub struct LPResult {crosspol:*mut f64,
                      copol:*mut u16,
                      k:*mut f64,
@@ -73,6 +93,9 @@ macro_rules! null_lp {
 #[repr(C)]
 /// Simple array structure for multilook processing
 /// Assumes Row major order, contiguous.
+/// data: pointer to data
+/// rows: number of rows in image
+/// cols: number of columns in image
 pub struct SimpleArray2D {
     data:*mut f64,
     rows:usize,
@@ -271,7 +294,7 @@ pub extern fn linear_get_raw_data(path:*const u8, pathlen:usize) -> RawResult
 /// LPResult
 pub extern fn lp_get_dualpol_data(path:*const u8,
                        pathlen:usize,
-                       lstsq_rescale:bool,
+                       lstsq_rescale_:u8,
                        configpath:*const u8,
                        configpathlen:usize) -> LPResult
 {
@@ -279,6 +302,7 @@ pub extern fn lp_get_dualpol_data(path:*const u8,
         return null_lp!();
     }
     let archpath = std::str::from_utf8(unsafe {std::slice::from_raw_parts(path, (pathlen)*std::mem::size_of::<u8>())}).unwrap();
+    let lstsq_rescale:bool = lstsq_rescale_ > 0;
     
     let (lin_param, lp_param) = match configpathlen {
         0 => {println!("Could not parse config path or was not provided. Using default.");

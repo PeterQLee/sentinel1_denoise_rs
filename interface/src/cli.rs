@@ -123,16 +123,16 @@ b -> estimated intercept parameters for LP method
 	.arg(Arg::with_name("paramhdf")
 	     .short("p")
 	     .help("HDF5 archive holding the parameters you want to apply for overriding the method\nOnly required for LinearApply")
-	     .takes_value(true)
-	     .required(false))
-	.arg(Arg::with_name("lstsq_rescale")
-	     .short("r")
-	     .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true")
-	     .takes_value(true)
-	     .required(false))
-	.arg(Arg::with_name("multilook")
-	      .short("m")
-	      .help("Apply multilook processing to all output images.
+             .takes_value(true)
+             .required(false))
+        .arg(Arg::with_name("lstsq_rescale")
+             .short("r")
+             .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true")
+             .takes_value(true)
+             .required(false))
+        .arg(Arg::with_name("multilook")
+              .short("m")
+              .help("Apply multilook processing to all output images.
 This ensures that all units are linear and that all measurements > 0.
 Supply comma seperated integers for the amount of multilooking over 
 row,col,num_cores (e.g. \"-m 16,16,8\" - for 16x16 multilooking using 8 processor cores)")

@@ -249,14 +249,6 @@ fn s1_noisefloor(_py: Python, m:&PyModule) -> PyResult<()> {
                let py_co = PyArray::from_array(__py, &co16).to_owned();
                let py_k = PyArray::from_array(__py, &k).to_owned();
 
-               
-               // convert lp params to vectors and outputs
-               // let m:&PyList = PyList::new(__py, params.iter()
-               //                                  .map(|i| PyList::new(__py, i.iter()
-               //                                                       .map(|j| j.m))));
-               // let b:&PyList = PyList::new(__py, params.iter()
-               //                   .map(|i| PyList::new(__py, i.iter()
-               //                                        .map(|j| j.b))));
                let m:&PyList = PyList::new(__py, params.iter()
                                            .map(|i| i.iter()
                                                 .map(|j| j.m))

@@ -1,4 +1,4 @@
-// Linear algebra
+//! Estimation method specific to linear programming method
 use std::sync::Arc;
 use crate::parse::HyperParams;
     
@@ -25,6 +25,10 @@ extern "C" {
 			  settings : * mut lp_scs_settings) -> lin_params ; }
 
 #[allow(non_snake_case)]
+/// Sets up linear program to be solved in SCS.
+/// * `lreal`- slice of log measured values
+/// * `lant`- slice of log antenna values
+/// * `hyper`- hyper params to send to SCS.
 pub fn solve_lp(lreal:&[f64], lant:&[f64], hyper:Arc<HyperParams>) -> lin_params {
     let m = lreal.len() + 2; // num constraints
     let n  = 2; // num variables

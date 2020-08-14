@@ -1,4 +1,4 @@
-/// Module is responsible for extracting data directly from xml files.
+//! Module is responsible for extracting data directly from xml files.
 use crate::read_from_archive::SentinelFormatId;
 use crate::est_lp::lp_scs_settings;
 
@@ -162,13 +162,13 @@ impl NoiseField {
         
  
         let azimuth_result = seek_to_list(&azst, &mut reader, NoiseField::azimuth_parse_func);
-	
+        
         let mut azarr = NoiseField::interpolate_col(azimuth_result, shape);
 
-	// Normalize azarr
-	NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
-	
-	azarr
+        // Normalize azarr
+        NoiseField::remove_azimuth_bias(azarr.view_mut(), shape);
+        
+        azarr
     }
 
     fn remove_azimuth_bias(mut arr:ArrayViewMut2<f64>, shape:(usize, usize)) {
@@ -217,7 +217,7 @@ impl NoiseField {
             .zip(rg_result.par_iter())
             .for_each(|a|{
                 let (val,rg) = a;
-                let line = rg.line;
+
                 let mut first_pixel = rg.pixels[0];
                 let mut last_pixel:usize;
                 let mut first_value = rg.values[0];
@@ -892,6 +892,7 @@ impl TimeRowLut {
     }
 
     /// Reorders timerow to most appopriate subswath
+    #[allow(non_snake_case)]
     fn find_best_subswath(a:&TimeRow, swath_bounds:&Vec<Vec<SwathElem>>, lut:&mut Vec<Vec<TimeRow>>) {
 	for (e, swath) in swath_bounds.iter().enumerate() {
 	    for s_elem in swath.iter() {
@@ -913,9 +914,9 @@ impl TimeRowLut {
 	
 	panic!("Could not find suitable subswath for geo-coordinates");
     }
-    
+    #[allow(non_snake_case)]
     fn polyfit_4(x:&[f64], y:&[f64]) -> (f64, f64, f64, f64, f64) {
-	let n = x.len(); // number of equations
+	let _n = x.len(); // number of equations
 	let k = 4; // degree of polynomial
 	let mut A = vec![0.0;(k+1)*(k+1)];
 	let mut b = vec![0.0;k+1];
@@ -1058,7 +1059,7 @@ impl BurstEntry {
 
 	for cur_swath in 0..num_subswaths {
 	    let mut raw_it = raw_burst_entries.iter().filter(|s| s.0 == cur_swath).peekable();
-	    // TODO: ensure that last element is not taken.
+
 	    loop {
 		let m = raw_it.next().unwrap();
 		let item = &m.1;
@@ -1116,7 +1117,7 @@ impl BurstEntry {
 	burst_coords
     }
 
-    /// TODO : lookup the row based on aztime.
+
     fn lookup_row_from_aztime(aztime:f64, nextaztime:f64, swath:usize, time_row_lut:&TimeRowLut) -> (usize, usize) {
 
 	// Obtain the change in time between each of the lut entries
@@ -1294,6 +1295,7 @@ impl RawPattern {
     }
 
     /// Parse burst information
+    #[allow(non_snake_case)]
     fn parse_burst(reader:&mut Reader<&[u8]>) -> (usize, Vec<f64>, Vec<f64>) {
 	let ANTNORM:f64 = 43.3_f64.exp();
         let mut subswath:usize = 0;
@@ -1401,7 +1403,7 @@ impl RawPattern {
     }
 
 }
-
+/// Hyper parameters for the LP method.
 pub struct HyperParams {
     pub box_l:usize,
     pub add_pad:usize,//? where to pad the adjacent slices
@@ -1494,6 +1496,7 @@ impl HyperParams {
 	}
     }
 
+    /// Extract scs settings from hyper.
     pub fn get_scs(&self) -> lp_scs_settings {
 	lp_scs_settings {
 	    normalize:self.scs_normalize as ::std::os::raw::c_int,
@@ -1522,6 +1525,7 @@ impl LinearConfig {
 	    lambda2:1.0
 	}
     }
+    /// Get parameters from ini files.
     pub fn parse_config(path_to_cfg:&str) -> Result<LinearConfig, String>
     {
 	let mut config = Ini::new();

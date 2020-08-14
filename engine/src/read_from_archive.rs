@@ -1,4 +1,4 @@
-/// Module for reading from sentinel-1 zip archive.
+//! Module for reading from sentinel-1 zip archive.
 use crate::parse::{NoiseField, SwathElem, TimeRowLut, BurstEntry, RawPattern};
 use crate::prep_lp::{ArrToArr, MidPoint, get_interpolation_pattern, TwoDArray};
 use zip::read::{ZipArchive};
@@ -242,7 +242,7 @@ fn decode_tiff<F>(file:&mut F) -> Result<(Array2<u16>, (usize, usize)), String>
             }
         },
         Err(e) => {
-	    
+            
             return Err(format!("The tiff file is not encoded properly (readimg) {}",e));
         }
     }
@@ -250,7 +250,7 @@ fn decode_tiff<F>(file:&mut F) -> Result<(Array2<u16>, (usize, usize)), String>
 
 
 fn create_lpargs<F>(file:&mut F,
-		 id: SentinelFormatId,
+                 id: SentinelFormatId,
 		 az_noise:Array2<f64>
 ) -> (Vec<Vec<SwathElem>>,Vec<usize>, LpAttributes)
     where F: Read
@@ -411,7 +411,7 @@ pub fn get_data_from_zip_path(path_s:&str, bothpol_flag:bool) -> Result<Sentinel
     let az_noise = NoiseField::compute_azimuth_field(&buffer, shape);
 
     // lp data
-    //file = get_file_handle(zp, crosspol_anno.as_str())?;
+
     let (swath_bounds,w,lp_args):(Vec<Vec<SwathElem>>,Vec<usize>,LpAttributes) = {
 	match &mut zh {
 	    ArchType::ZipA(ziparch) => {
@@ -455,10 +455,3 @@ pub fn get_data_from_zip_path(path_s:&str, bothpol_flag:bool) -> Result<Sentinel
 }
                     
     
-	// Err(_e) => {
-	//     let v = format!("Cannot open zipfile {}", path_s);
-        //     return Err(v);
-	// }
-
-
-
