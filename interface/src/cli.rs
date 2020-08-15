@@ -127,8 +127,7 @@ b -> estimated intercept parameters for LP method
              .required(false))
         .arg(Arg::with_name("lstsq_rescale")
              .short("r")
-             .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true")
-             .takes_value(true)
+             .help("Flag for whether to apply least squares rescaling for LP method. Defaults to true if not supplied")
              .required(false))
         .arg(Arg::with_name("multilook")
               .short("m")
@@ -150,9 +149,9 @@ row,col,num_cores (e.g. \"-m 16,16,8\" - for 16x16 multilooking using 8 processo
     let multilook:Option<Ml> = parse_multi(matches.value_of("multilook"));
 
 
-    let lstsq_rescale:bool = value_t!(matches.value_of("lstsq_rescale"), bool).unwrap_or_else(|_e| {true});
+    let lstsq_rescale:bool = !matches.is_present("lstsq_rescale");
     // Debug statement
-    if !lstsq_rescale {println!("not estimating least squares");}
+    //if !lstsq_rescale {println!("not estimating least squares");}
 
     let paramhdf:hdf5::Result<hdf5::File> = match paramhdf_s{
 	Some(s) => hdf5::File::open(s),
