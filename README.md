@@ -69,38 +69,38 @@ denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_02
 ```
 
 
-> `<opmode>` is used to indicate the algorithm you wish to apply to the data
->> `LinearEst`: applies linear rescaling of the default noise floor estimated with least squares estimation. Writes three hdf groups to `<outputsar>`
->>> `crosspol`: the processed cross-polarized image in square units
->>> `copol`: the unprocessed co-polarized image in linear units
->>> `k`: the estimated linear scales.
->> `LinearApply`: Applies the linear scaling method using custom user provided scales, k. This requires the `<paramhdf>` flag to be specified, with the group `k` holding the parameters. Writes three hdf groups to `<outputsar>`
->>> `crosspol`: the processed cross-polarized image in square units
->>> `copol`: the unprocessed co-polarized image in linear units
->>> `k`: the scaling values provided by the user.
->> `Raw`: Returns the raw data information. Writes three hdf groups to `<outputsar>`
->>> `crosspol`: the unprocessed cross-polarized image in linear units
->>> `copol`: the unprocessed co-polarized image in linear units
->>> `y`: the default noise floor estimate in linear units
->> `LpEst`: Generates a noise floor estimate to be power functions of the antenna radiation pattern strength with respect to range. This is the most advanced and computationally expensive method that requires multiple linear programs to be solved. As a result, it is recommended to store `m` and `b` after computation and run `LpApply` if you need to regenerate the image. Writes six groups to `<outputsar>`.
->>> `crosspol`: the processed cross-polarized image in square units
->>> `copol`: the unprocessed co-polarized image in linear units
->>> `k`: the scaling values provided by the user.
->>> `m`: the slopes in the power functions, in order of subswaths and range splits
->>> `b`: the slopes in the power functions, in order of subswaths and range splits
->>> `subswaths`: the number of subswaths in the image.
->> `LpApply`: Applies power function method to the image using user provided parameters. This requires the `<paramhdf>` flag to be specified, with the groups `m` and `b` holding the parameters. Writes two groups to `<outputsar>`
->>> `crosspol`: the processed cross-polarized image in square units
->>> `copol`: the unprocessed co-polarized image in linear units
-> `<inputsar>` is the path to the Sentinel-1 archive. It can either be in the .zip form or the unzipped directory. It is required that all files are intact.
-> `<outputsar>` is the path to the output hdf5 file.
+* `<opmode>` is used to indicate the algorithm you wish to apply to the data\
+> `LinearEst`: applies linear rescaling of the default noise floor estimated with least squares estimation. Writes three hdf groups to `<outputsar>`\
+>> `crosspol`: the processed cross-polarized image in square units\
+>> `copol`: the unprocessed co-polarized image in linear units\
+>> `k`: the estimated linear scales.\
+> `LinearApply`: Applies the linear scaling method using custom user provided scales, k. This requires the `<paramhdf>` flag to be specified, with the group `k` holding the parameters. Writes three hdf groups to `<outputsar>`\
+>> `crosspol`: the processed cross-polarized image in square units\
+>> `copol`: the unprocessed co-polarized image in linear units\
+>> `k`: the scaling values provided by the user.\
+> `Raw`: Returns the raw data information. Writes three hdf groups to `<outputsar>`\
+>> `crosspol`: the unprocessed cross-polarized image in linear units\
+>> `copol`: the unprocessed co-polarized image in linear units\
+>> `y`: the default noise floor estimate in linear units\
+> `LpEst`: Generates a noise floor estimate to be power functions of the antenna radiation pattern strength with respect to range. This is the most advanced and computationally expensive method that requires multiple linear programs to be solved. As a result, it is recommended to store `m` and `b` after computation and run `LpApply` if you need to regenerate the image. Writes six groups to `<outputsar>`.\
+>> `crosspol`: the processed cross-polarized image in square units\
+>> `copol`: the unprocessed co-polarized image in linear units\
+>> `k`: the scaling values provided by the user.\
+>> `m`: the slopes in the power functions, in order of subswaths and range splits\
+>> `b`: the slopes in the power functions, in order of subswaths and range splits\
+>> `subswaths`: the number of subswaths in the image.\
+> `LpApply`: Applies power function method to the image using user provided parameters. This requires the `<paramhdf>` flag to be specified, with the groups `m` and `b` holding the parameters. Writes two groups to `<outputsar>`\
+>> `crosspol`: the processed cross-polarized image in square units\
+>> `copol`: the unprocessed co-polarized image in linear units\
+* `<inputsar>` is the path to the Sentinel-1 archive. It can either be in the .zip form or the unzipped directory. It is required that all files are intact.\
+* `<outputsar>` is the path to the output hdf5 file.\
 
 
-The `OPTIONS` present a number of optional flags that influence the selected `<opmode>`.
-> `-c=[path]`, `--config=[path]`: path to a configuration .ini file with parameters to modify the algorithms. An example .ini file is given in as base_config.ini.
-> `-p=[path]`, `--paramhdf=[path]`: a path to an hdf5 file holding parameter values.
-> `-r`, `--nolstsq_rescale`: = indicates not to apply `LinearEst` before `LpEst` and to use default noise floor without scaling. Ignored for IW images. Ignored in every mode except `LpEst`.
-> `-m=row,col,cores`, `--multilook=row,col,cores`: applies multilook processing to all of the output images. It reduces the output dimensions by a factor of `row` and `col` along the rows and columns respectively. `cores` indicates the number of CPU cores to use during processing. **Note that this results in the values of the images being converted to linear units. Any negative values after multilooking are rounded to zero.**
+The `OPTIONS` present a number of optional flags that influence the selected `<opmode>`.\
+> `-c=[path]`, `--config=[path]`: path to a configuration .ini file with parameters to modify the algorithms. An example .ini file is given in as base_config.ini.\
+> `-p=[path]`, `--paramhdf=[path]`: a path to an hdf5 file holding parameter values.\
+> `-r`, `--nolstsq_rescale`: = indicates not to apply `LinearEst` before `LpEst` and to use default noise floor without scaling. Ignored for IW images. Ignored in every mode except `LpEst`.\
+> `-m=row,col,cores`, `--multilook=row,col,cores`: applies multilook processing to all of the output images. It reduces the output dimensions by a factor of `row` and `col` along the rows and columns respectively. `cores` indicates the number of CPU cores to use during processing. **Note that this results in the values of the images being converted to linear units. Any negative values after multilooking are rounded to zero.**\
 
 ### Program interface
 The other programming interfaces have the exact same functionalities as the command line interface,
@@ -152,21 +152,21 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 >
 > Parameters:
 >
->> archpath: str
->>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
->> k: ndarray(1)
->>>     One dimensional array in 64-bit float that indicates the linear scaling parameters
->>>     to apply to each subswath. Length of array must equal five.
->>>     To apply the standard ESA noise removal, make k = np.array([1.0,1.0,1.0,1.0,1.0])
+> archpath: str
+>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+> k: ndarray(1)
+>>     One dimensional array in 64-bit float that indicates the linear scaling parameters
+>>     to apply to each subswath. Length of array must equal five.
+>>     To apply the standard ESA noise removal, make k = np.array([1.0,1.0,1.0,1.0,1.0])
 >
 >
 > Returns:
 > (cross, co)
 >
->> cross: ndarray(2)
->>>    array holding processed cross-polarized measurements (square)
->> co: ndarray(2)
->>>    array holding unprocessed co-polarized measurements (linear)
+> cross: ndarray(2)
+>>    array holding processed cross-polarized measurements (square)
+> co: ndarray(2)
+>>    array holding unprocessed co-polarized measurements (linear)
 >
 
 
@@ -176,18 +176,18 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 >
 > Parameters:
 >
->> archpath: str
->>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+> archpath: str
+>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
 >
 > Returns:
 > (cross, co, y)
 >
->> cross: ndarray(2)
->>>    array holding unprocessed cross-polarized measurements (linear)
->> co: ndarray(2)
->>>    array holding unprocessed co-polarized measurements (linear)
->> y: ndarray(2)
->>>    array holding noise field (linear)
+> cross: ndarray(2)
+>>    array holding unprocessed cross-polarized measurements (linear)
+> co: ndarray(2)
+>>    array holding unprocessed co-polarized measurements (linear)
+> y: ndarray(2)
+>>    array holding noise field (linear)
 
 `s1_noisefloor.lp_get_dualpol_data(archpath, lstsq_rescale, config_path)`
 > Applies the linear programming method to restimate a noise floor based
@@ -196,30 +196,30 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 >
 > Parameters:
 >
->> archpath: str
->>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
->> lstsq_rescale: bool
->>>     Indicate whether you want to apply the least squares method from
->>>     linear_get_dualpol_data to get the baseline minimum offset values for
->>>    the method. Ignored if product type is 
->>>     true for applying the method
->>>     false to just use the default ESA noise floor for this.
->> config_path: str or None
->>>     Optional path to config file. If None (or non-string) will use default configuration.
+> archpath: str
+>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+> lstsq_rescale: bool
+>>     Indicate whether you want to apply the least squares method from
+>>     linear_get_dualpol_data to get the baseline minimum offset values for
+>>    the method. Ignored if product type is 
+>>     true for applying the method
+>>     false to just use the default ESA noise floor for this.
+> config_path: str or None
+>>     Optional path to config file. If None (or non-string) will use default configuration.
 >
 > Returns:
 > (cross, co, m, v)
 >
->> cross: ndarray(2)
->>>    array holding processed cross-polarized measurements (square)
->> co: ndarray(2)
->>>    array holding unprocessed co-polarized measurements (linear)
->> m: ndarray(1)
->>>    Array of slope / exponent parameters estimated.
->> b: ndarray(1)
->>>    Array of intercept parameters estimated
->> k: ndarray(1)
->>>    Array of linear scales computed by prior to applying the LP.
+> cross: ndarray(2)
+>>    array holding processed cross-polarized measurements (square)
+> co: ndarray(2)
+>>    array holding unprocessed co-polarized measurements (linear)
+> m: ndarray(1)
+>>    Array of slope / exponent parameters estimated.
+> b: ndarray(1)
+>>    Array of intercept parameters estimated
+> k: ndarray(1)
+>>    Array of linear scales computed by prior to applying the LP.
 
 `s1_noisefloor.lp_get_customscale_data(archpath, m, b, config_path)`
 >  Applies the power function noise floor obtained from linear programming,
@@ -228,22 +228,22 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 > 
 > Parameters:
 >
->> archpath: str
->>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
->> m: list
->>>     List of slope parameters
->> b: list
->>>     List of intercept parameters.
->> config_path: str or None
->>>     Optional path to config file. If None (or non-string) will use default configuration.
->
+> archpath: str
+>>     Path to the zip or directory unpacked from the Sentinel-1 zip archive
+> m: list
+>>     List of slope parameters
+> b: list
+>>     List of intercept parameters.
+> config_path: str or None
+>>     Optional path to config file. If None (or non-string) will use default configuration.
+
 > Returns:
 > (cross, co)
 >
->> cross: ndarray(2)
->>>    array holding processed cross-polarized measurements (square)
->> co: ndarray(2)
->>>    array holding unprocessed co-polarized measurements (linear)
+> cross: ndarray(2)
+>>    array holding processed cross-polarized measurements (square)
+> co: ndarray(2)
+>>    array holding unprocessed co-polarized measurements (linear)
 
 
 
