@@ -43,8 +43,8 @@ int main () {
 
   LPResult res4 = lp_get_customscale_data(path,
 					  pathlen,
-					  res3.m,
-					  res3.b,
+					  m,
+					  b,
 					  res3.plen,
 					  "",
 					  0
@@ -53,7 +53,6 @@ int main () {
 						 
   destroy_lpresult(&res3);
 
-  //SimpleArray2D = post_multilook_and_floor(
   destroy_lpresult(&res4);
 
   
