@@ -18,7 +18,7 @@ information provided in the Sentinel-1 xml files.
 
  2. A non-linear noise floor removal method that computes the noise floor as a power function of
     the antenna pattern. Parameters are estimated with linear programming. This is the application
-    of the method in []. Can be applied to both EW and IW GRD mode images.
+    of the method in http://www.eng.uwaterloo.ca/~pqjlee/lp_paper_aug14_2020.pdf. Can be applied to both EW and IW GRD mode images.
 
 ## Citing
 If you use this in your work please cite the following:
@@ -28,9 +28,7 @@ If you use this in your work please cite the following:
   title =        {{Sentinel-1} Additive Noise Removal from Cross-Polarization Extra-Wide {TOPSAR} with Dynamic Least-Squares},
   journal =      {Remote Sensing of Environment},
   year =         {2020},
-  OPTkey =       {},
   volume =    {248},
-  OPTnumber =    {},
   pages =     {111982},
   month =     {October},
   note =      {},
