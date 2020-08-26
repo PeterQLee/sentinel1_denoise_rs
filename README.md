@@ -32,7 +32,6 @@ If you use this in your work please cite the following:
   pages =     {111982},
   month =     {October},
   note =      {},
-  OPTannote =    {},
   doi = {https://doi.org/10.1016/j.rse.2020.111982},
   url = {http://www.sciencedirect.com/science/article/pii/S0034425720303527}
 }
@@ -95,43 +94,43 @@ denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_02
 ```
 
 
-* `<opmode>` is used to indicate the algorithm you wish to apply to the data\
+* `<opmode>` is used to indicate the algorithm you wish to apply to the data
 > * `LinearEst`: applies linear rescaling of the default noise floor estimated with least squares estimation. Writes three hdf groups to `<outputsar>`\
 >> `crosspol`: the processed cross-polarized image in square units\
 >> `copol`: the unprocessed co-polarized image in linear units\
->> `k`: the estimated linear scales.\
+>> `k`: the estimated linear scales.
 
-> * `LinearApply`: Applies the linear scaling method using custom user provided scales, k. This requires the `<paramhdf>` flag to be specified, with the group `k` holding the parameters. Writes three hdf groups to `<outputsar>`\
+> * `LinearApply`: Applies the linear scaling method using custom user provided scales, k. This requires the `<paramhdf>` flag to be specified, with the group `k` holding the parameters. Writes three hdf groups to `<outputsar>`
 >> `crosspol`: the processed cross-polarized image in square units\
 >> `copol`: the unprocessed co-polarized image in linear units\
->> `k`: the scaling values provided by the user.\
+>> `k`: the scaling values provided by the user.
 
-> * `Raw`: Returns the raw data information. Writes three hdf groups to `<outputsar>`\
+> * `Raw`: Returns the raw data information. Writes three hdf groups to `<outputsar>`
 >> `crosspol`: the unprocessed cross-polarized image in linear units\
 >> `copol`: the unprocessed co-polarized image in linear units\
->> `y`: the default noise floor estimate in linear units\
+>> `y`: the default noise floor estimate in linear units
 
-> * `LpEst`: Generates a noise floor estimate to be power functions of the antenna radiation pattern strength with respect to range. This is the most advanced and computationally expensive method that requires multiple linear programs to be solved. As a result, it is recommended to store `m` and `b` after computation and run `LpApply` if you need to regenerate the image. Writes six groups to `<outputsar>`.\
+> * `LpEst`: Generates a noise floor estimate to be power functions of the antenna radiation pattern strength with respect to range. This is the most advanced and computationally expensive method that requires multiple linear programs to be solved. As a result, it is recommended to store `m` and `b` after computation and run `LpApply` if you need to regenerate the image. Writes six groups to `<outputsar>`.
 >> `crosspol`: the processed cross-polarized image in square units\
 >> `copol`: the unprocessed co-polarized image in linear units\
 >> `k`: the scaling values provided by the user.\
 >> `m`: the slopes in the power functions, in order of subswaths and range splits\
 >> `b`: the slopes in the power functions, in order of subswaths and range splits\
->> `subswaths`: the number of subswaths in the image.\
+>> `subswaths`: the number of subswaths in the image.
 
-> * `LpApply`: Applies power function method to the image using user provided parameters. This requires the `<paramhdf>` flag to be specified, with the groups `m` and `b` holding the parameters. Writes two groups to `<outputsar>`\
+> * `LpApply`: Applies power function method to the image using user provided parameters. This requires the `<paramhdf>` flag to be specified, with the groups `m` and `b` holding the parameters. Writes two groups to `<outputsar>`
 >> `crosspol`: the processed cross-polarized image in square units\
->> `copol`: the unprocessed co-polarized image in linear units\
+>> `copol`: the unprocessed co-polarized image in linear units
 
-* `<inputsar>` is the path to the Sentinel-1 archive. It can either be in the .zip form or the unzipped directory. It is required that all files are intact.\
-* `<outputsar>` is the path to the output hdf5 file.\
+* `<inputsar>` is the path to the Sentinel-1 archive. It can either be in the .zip form or the unzipped directory. It is required that all files are intact.
+* `<outputsar>` is the path to the output hdf5 file.
 
 
-* `OPTIONS` present a number of optional flags that influence the selected `<opmode>`.\
-> * `-c=[path]`, `--config=[path]`: path to a configuration .ini file with parameters to modify the algorithms. An example .ini file is given in as base_config.ini.\
-> * `-p=[path]`, `--paramhdf=[path]`: a path to an hdf5 file holding parameter values.\
-> * `-r`, `--nolstsq_rescale`: = indicates not to apply `LinearEst` before `LpEst` and to use default noise floor without scaling. Ignored for IW images. Ignored in every mode except `LpEst`.\
-> * `-m=row,col,cores`, `--multilook=row,col,cores`: applies multilook processing to all of the output images. It reduces the output dimensions by a factor of `row` and `col` along the rows and columns respectively. `cores` indicates the number of CPU cores to use during processing. **Note that this results in the values of the images being converted to linear units. Any negative values after multilooking are rounded to zero.**\
+* `OPTIONS` present a number of optional flags that influence the selected `<opmode>`.
+> * `-c=[path]`, `--config=[path]`: path to a configuration .ini file with parameters to modify the algorithms. An example .ini file is given in as base_config.ini.
+> * `-p=[path]`, `--paramhdf=[path]`: a path to an hdf5 file holding parameter values.
+> * `-r`, `--nolstsq_rescale`: = indicates not to apply `LinearEst` before `LpEst` and to use default noise floor without scaling. Ignored for IW images. Ignored in every mode except `LpEst`.
+> * `-m=row,col,cores`, `--multilook=row,col,cores`: applies multilook processing to all of the output images. It reduces the output dimensions by a factor of `row` and `col` along the rows and columns respectively. `cores` indicates the number of CPU cores to use during processing. **Note that this results in the values of the images being converted to linear units. Any negative values after multilooking are rounded to zero.**
 
 ### Program interface
 The other programming interfaces have the exact same functionalities as the command line interface,
@@ -283,10 +282,14 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 > square roots the output values.
 >
 > Parameters:
->> py_x: Input array for multilooking (square units)
->> row_factor: integer amount to mean reduce row by.
->> col_factor: integer amount to mean reduce col by.
->> num_cores: number of multithreading cores to use.
+> x: ndarray 
+>>    Input array for multilooking (square units)
+> row_factor: integer
+>>    integer amount to mean reduce row by.
+> col_factor: integer
+>>    integer amount to mean reduce col by.
+> num_cores: integer
+>>    number of multithreading cores to use.
 >
 > Output:
 >> x : multilooked image (linear units)
