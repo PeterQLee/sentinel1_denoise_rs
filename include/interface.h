@@ -89,6 +89,17 @@ typedef struct  {
   uintptr_t cols;
 }SimpleArray2D;
 
+typedef struct {
+  SimpleArray2D cross;
+  SimpleArray2D co;
+}TwoStruct;
+
+typedef struct {
+  SimpleArray2D cross;
+  SimpleArray2D co;
+  SimpleArray2D y;
+}ThreeStruct;
+
 void destroy_simplearray2d(SimpleArray2D *a) {
   free(a->data);
 }
@@ -216,3 +227,97 @@ SimpleArray2D post_multilook_and_floor(SimpleArray2D *x,
                                        uintptr_t col_factor,
                                        uintptr_t num_cores);
 
+
+
+/// All of the below are functions that conver the result types to SimpleArray2D types.
+double* copy_u16_to_f64 (uint16_t *d, uintptr_t rows, uintptr_t cols) {
+  double *o =(double*) malloc(sizeof(double)*rows*cols);
+  for (uintptr_t i=0;i<rows;i++) {
+    for (uintptr_t j=0;j<cols;j++) {
+      o[i*cols+j] = (double) d[i*cols+j];
+    }
+  }
+  return o;
+}
+
+TwoStruct linear_to_simplearray(LinearResult *x) {
+  SimpleArray2D crosspol;
+
+  crosspol.data = x->crosspol;
+  crosspol.rows = x->rows;
+  crosspol.cols = x->cols;
+  
+  SimpleArray2D copol;
+  double *d = copy_u16_to_f64(x->copol, x->rows, x->cols);
+  copol.data = d;
+  copol.rows = x->rows;
+  copol.cols = x->cols;
+
+  free(x->copol);
+  free(x->k);
+  
+  x->crosspol = NULL;
+  x->copol = NULL;
+  x->k = NULL;
+
+  TwoStruct a = {crosspol, copol};
+  return a;
+}
+
+TwoStruct lpresult_to_simplearray(LPResult *x) {
+  SimpleArray2D crosspol;
+
+  crosspol.data = x->crosspol;
+  crosspol.rows = x->rows;
+  crosspol.cols = x->cols;
+
+  SimpleArray2D copol;
+  double *d = copy_u16_to_f64(x->copol, x->rows, x->cols);
+  copol.data = d;
+  copol.rows = x->rows;
+  copol.cols = x->cols;
+
+  free(x->copol);
+  free(x->k);
+  free(x->m);
+  free(x->b);
+
+  x->crosspol = NULL;
+  x->copol = NULL;
+  x->k = NULL;
+  x->m = NULL;
+  x->b = NULL;
+  TwoStruct a = {crosspol, copol};
+  return a;
+}
+
+
+
+ThreeStruct rawresult_to_simplearray(RawResult *x) {
+  SimpleArray2D crosspol;
+
+  double *o = copy_u16_to_f64(x->copol, x->rows, x->cols);
+  crosspol.data = o;
+  crosspol.rows = x->rows;
+  crosspol.cols = x->cols;
+
+  SimpleArray2D copol;
+  double *d = copy_u16_to_f64(x->copol, x->rows, x->cols);
+  copol.data = d;
+  copol.rows = x->rows;
+  copol.cols = x->cols;
+
+  SimpleArray2D y;
+  y.data = x->y;
+  y.rows = x->rows;
+  y.cols = x->cols;
+
+  free(x->crosspol);
+  free(x->copol);
+  x->crosspol = NULL;
+  x->copol = NULL;
+  x->y = NULL;
+
+  ThreeStruct a = {crosspol, copol, y};
+  return a;
+}
