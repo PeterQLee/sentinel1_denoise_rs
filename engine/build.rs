@@ -46,9 +46,9 @@ fn main() {
     
     //let out_dir = env::var("OUT_DIR").unwrap();
     let base = env::var("CARGO_MANIFEST_DIR").unwrap();
-    Command::new("make")
-	.current_dir(&Path::new(format!("{}/src/c_solve/", base).as_str()))
-	.status().unwrap();
+    // Command::new("make")
+    //     .current_dir(&Path::new(format!("{}/src/c_solve/", base).as_str()))
+    //     .status().unwrap();
 
     println!("cargo:rustc-link-search=native={}/src/c_solve/", base);
     println!("cargo:rustc-link-lib=static=lp_solve");
