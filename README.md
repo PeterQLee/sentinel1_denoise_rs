@@ -54,17 +54,31 @@ This software has several prerequisites
 As these algorithms are written in rust, you will need to install the appropriate tools in order to
 compile it for your computer. You will need to install the nightly rust toolchain by doing the followinng.
 a. Get rustup. Visit [https://rustup.rs] 
-b. Install rust nightly. `rustup toolchain install nightly`
+b. Install rust nightly. `rustup toolchain install nightly` and optionally `rustup default nightly` depending on your configuration.
 
 3. OpenBLAS library [https://github.com/xianyi/OpenBLAS].
 This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install openblas-dev`).
-4. HDF5 library [https://www.hdfgroup.org/downloads/hdf5/]
+4. HDF5 library version 1.10, with development headers [https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.10/hdf5-1.10.6/]
 This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install hdf5lib-dev`).
 5. Splitting conic-solver library [https://github.com/cvxgrp/scs].
 
+6. Optional - CMake version 3.12 or above [https://cmake.org/download/]. If you are installing this on linux, you can probably get away without using cmake. This is likely needed for macos or windows.
 
-After these prerequisites have been installed you can install the software by running
-`make install`
+
+### Installing
+
+#### Cmake
+Create the build scripts using the standard procedure for building cmake projects on your system (see https://cmake.org/runningcmake/)
+
+On unix this can be done with the following
+```bash
+mkdir build
+cd build
+cmake ../
+make
+sudo make install
+```
+
 
 Depending on your system, you may need to supply some additional arguments. 
 

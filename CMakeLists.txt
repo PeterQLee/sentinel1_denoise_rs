@@ -2,13 +2,17 @@ cmake_minimum_required(VERSION 3.12)
 find_package(PythonInterp 3)
 find_package(PythonLibs 3)
 
+find_package(HDF5 REQUIRED)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
+
 find_library(SCS_LIB NAMES scsdir  REQUIRED)
 find_path(SCS_PATH NAMES scs REQUIRED)
+get_filename_component(SCS_LIB_DIR ${SCS_LIB} DIRECTORY)
 
-message(STATUS "${SCS_LIB}")
+message(STATUS "SCS_LIB = ${SCS_LIB}")
 message(STATUS "${SCS_PATH}")
+
 
 if(NOT SCS_LIB)
   message(FATAL_ERROR "SCS library not found")
@@ -17,8 +21,8 @@ if(NOT SCS_LIB)
   message(FATAL_ERROR "SCS include files not found")
 endif()
 
-get_filename_component(SCS_LIB_DIR ${SCS_LIB} DIRECTORY)
-message(STATUS "${SCS_LIB_DIR}")
+
+message(STATUS "SCS_LIB_DIR=${SCS_LIB_DIR}")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(CARGO_CMD cargo build)
@@ -45,7 +49,8 @@ set_target_properties(lp_solve PROPERTIES
 # 
 add_custom_target(sentlib ALL
     COMMENT "Compiling Sentinel library"
-    COMMAND SCS_LIB=${SCS_LIB} CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+    COMMAND HDF5_DIR=${HDF5_DIR} SCS_LIB=${SCS_LIB_DIR} CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+
     # copy result from library and bin.
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
