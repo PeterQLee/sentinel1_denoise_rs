@@ -1,3 +1,5 @@
+project(sentinel1_denoise_tool
+  VERSION 1.0.0)
 cmake_minimum_required(VERSION 3.12)
 find_package(PythonInterp 3)
 find_package(PythonLibs 3)
@@ -43,13 +45,16 @@ set(C_SOLVE_DIR "${CMAKE_CURRENT_BINARY_DIR}/engine/src/c_solve")
 add_library(lp_solve STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/scs_solve.c
   ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/scs_solve.h)
+
+
 set_target_properties(lp_solve PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/)
 
-# 
+#target_link_libraries(lp_solve SCS_LIB)
+
 add_custom_target(sentlib ALL
     COMMENT "Compiling Sentinel library"
-    COMMAND HDF5_DIR=${HDF5_DIR} SCS_LIB=${SCS_LIB_DIR} CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+    COMMAND SCS_LIB=${SCS_LIB_DIR} CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
 
     # copy result from library and bin.
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}

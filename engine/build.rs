@@ -37,6 +37,8 @@ fn main() {
 	}
     }
 
+    println!("cargo:rustc-link-lib=static=scsdir");
+        
     let base = env::var("CARGO_MANIFEST_DIR").unwrap();
 
     println!("cargo:rustc-link-search=native={}/src/c_solve/", base);

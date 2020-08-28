@@ -3,7 +3,7 @@ Author: Peter Q Lee. pqjlee (at) uwaterloo (dot) ca
 ## About
 This library provides algorithms to remove noise floor intensity patterns that are prevelant in
 Sentinel-1 cross-polarized images in EW mode, and to a lesser degree IW mode. This is provided in
-four ways\: a command line interface, a Python interface, a Rust interface, and a C interface. Currently the library has only been tested in a Linux environment, but testing for Windows is planned for the future.
+four ways\: a command line interface, a Python interface, a Rust interface, and a C interface. Currently the library has only been tested in a Linux environment (Ubuntu 16.04 and 19.10), but testing for Windows is planned for the future.
 
 
 The algorithms in this library make use of convex optimization to construct noise floors that can be
@@ -59,10 +59,10 @@ b. Install rust nightly. `rustup toolchain install nightly` and optionally `rust
 3. OpenBLAS library [https://github.com/xianyi/OpenBLAS].
 This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install openblas-dev`).
 4. HDF5 library version 1.10, with development headers [https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.10/hdf5-1.10.6/]
-This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install hdf5lib-dev`).
+This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install hdf5lib-dev`) currently, although future versions may break this.
 5. Splitting conic-solver library [https://github.com/cvxgrp/scs].
 
-6. Optional - CMake version 3.12 or above [https://cmake.org/download/]. If you are installing this on linux, you can probably get away without using cmake. This is likely needed for macos or windows.
+6. Optional - CMake version 3.12 or above [https://cmake.org/download/]. If you are installing this on linux, you can probably get away without using cmake, although you'll need to manually move some files (specifically the location of the python library). This is likely needed for windows builds.
 
 
 ### Installing
@@ -78,15 +78,13 @@ cmake ../
 make
 sudo make install
 ```
+If this built, then everything should be in the proper space for system-wide use.
 
-
-Depending on your system, you may need to supply some additional arguments. 
-
-If SCS isn't found, you can supply the SCS\_LIB=_path_ and SCS\_INC=_path_ environment arguments to
-indicate the location of the paths to the splitting conic solver library. On linux you could do this
-like:
-`SCS_LIB=path/to/scs/out SCS_INC=path/to/scs/include/ make`
-
+#### Non Cmake
+```bash
+cargo build --release
+```
+It is up to you to move the output files to useful destinations.
 
 ## Usage
 There are four methods to utilize the library a command line tool, and the three programmatic
@@ -161,7 +159,7 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 ```
 
 
-## Reference functions
+#### Reference functions
 
 * `s1_noisefloor.linear_get_dualpol_data(archpath, config_path)`
 > Applies the lstsquares estimation method to retrieve scaling parameters, k,
@@ -307,3 +305,22 @@ hv_multilooked = s1_noisefloor.post_multilook_and_floor(hv, 16, 16, 8)
 >
 > Output:
 >> x : multilooked image (linear units)
+
+
+#### C interface
+
+Assuming everything built properly, you should be able to use the header file like
+```C
+#include <s1_noisefloor/interface.h>
+```
+
+Then compiling will be something like:
+```bash
+gcc -ls1_noisefloor -lpython3.X program.c -o program
+```
+where X is the python version on your computer.
+
+#### Rust interface
+
+Documentation for the rust interface can be found here:
+https://peterqlee.github.io/doc/s1_noisefloor_engine/index.html

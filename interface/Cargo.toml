@@ -1,6 +1,6 @@
 [package]
 name = "s1-interface"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["PeterQLee <leep1995@gmail.com>"]
 edition = "2018"
 

@@ -1,10 +1,9 @@
 [package]
 name = "s1-noisefloor-engine"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["PeterQLee <leep1995@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 blas = "0.19"
@@ -24,9 +23,6 @@ libc = "*"
 chrono = "*"
 rustfft = "3.0.1"
 configparser = "0.13.2"
-
-# [build-dependencies]
-# pkg-config = "0.3.16"
 
 [lib]
 name = "s1_noisefloor_engine"
