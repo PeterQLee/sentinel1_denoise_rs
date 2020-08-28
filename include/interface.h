@@ -320,6 +320,7 @@ TwoStruct lpresult_to_simplearray(LPResult *x) {
 ThreeStruct rawresult_to_simplearray(RawResult *x) {
   SimpleArray2D crosspol;
 
+
   double *o = copy_u16_to_f64(x->crosspol, x->rows, x->cols);
   crosspol.data = o;
   crosspol.rows = x->rows;
