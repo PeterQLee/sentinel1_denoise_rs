@@ -1,5 +1,4 @@
-project(sentinel1_denoise_tool
-  VERSION 1.0.0)
+project(sentinel1_denoise_tool)
 cmake_minimum_required(VERSION 3.12)
 find_package(PythonInterp 3)
 find_package(PythonLibs 3)
