@@ -2,8 +2,10 @@
 Author: Peter Q Lee. pqjlee (at) uwaterloo (dot) ca
 ## About
 This library provides algorithms to remove noise floor intensity patterns that are prevelant in
-Sentinel-1 cross-polarized images in EW mode, and to a lesser degree IW mode. This is provided in
+Sentinel-1 cross-polarized images in EW mode, and to a lesser degree, IW mode. This is provided in
 four ways\: a command line interface, a Python interface, a Rust interface, and a C interface. Currently the library has only been tested in a Linux environment (Ubuntu 16.04 and 19.10), but testing for Windows is planned for the future.
+
+
 
 
 The algorithms in this library make use of convex optimization to construct noise floors that can be
@@ -18,7 +20,11 @@ information provided in the Sentinel-1 xml files.
 
  2. A non-linear noise floor removal method that computes the noise floor as a power function of
     the antenna pattern. Parameters are estimated with linear programming. This is the application
-    of the method in http://www.eng.uwaterloo.ca/~pqjlee/lp_paper_aug14_2020.pdf. Can be applied to both EW and IW GRD mode images.
+    of the method in http://www.eng.uwaterloo.ca/~pqjlee/lp_paper_aug14_2020.pdf . Can be applied to both EW and IW GRD mode images.
+
+### Example comparison
+| Original | ESA (Linear with k = [1,1,1,1,1] | LinearEst | LPEst | 
+| ![original](img/raw_c.png) | ![esa](img/esa_c.png) | ![linearest](img/linear_c.png) | ![linearest](img/lp_c.png) |
 
 ## Citing
 If you use this in your work please cite the following:
@@ -78,7 +84,7 @@ cmake ../
 make
 sudo make install
 ```
-If this built, then everything should be in the proper space for system-wide use.
+If this built, then everything should be in the proper space for system-wide use. Note for the last step, you might not be able to find cargo in sudo mode, so you might need to do `sudo ln -s $HOME/.cargo/bin/cargo /usr/local/bin` first, depending on your configuration.
 
 #### Non Cmake
 ```bash
@@ -100,11 +106,12 @@ The tool can be executed with
 ```bash
 denoise_s1 [OPTIONS] <opmode> <inputsar> <outputsar>
 ```
+Use ```denoise_s1 --help``` for usage options.
+
 Example usage: 
 ```bash
 denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.SAFE output.hdf5
 ```
-
 
 * `<opmode>` is used to indicate the algorithm you wish to apply to the data
 > * `LinearEst`: applies linear rescaling of the default noise floor estimated with least squares estimation. Writes three hdf groups to `<outputsar>`\
