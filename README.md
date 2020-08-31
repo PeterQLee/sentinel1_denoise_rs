@@ -23,8 +23,10 @@ information provided in the Sentinel-1 xml files.
     of the method in http://www.eng.uwaterloo.ca/~pqjlee/lp_paper_aug14_2020.pdf . Can be applied to both EW and IW GRD mode images.
 
 ### Example comparison
-| Original | ESA (Linear with k = [1,1,1,1,1] | LinearEst | LPEst | 
-| ![original](img/raw_c.png) | ![esa](img/esa_c.png) | ![linearest](img/linear_c.png) | ![linearest](img/lp_c.png) |
+
+ Original | ESA (Linear with k = [1,1,1,1,1] | LinearEst | LPEst 
+ ---- | ---- | ---- | ---- 
+ ![original](img/raw_c.png) | ![esa](img/esa_c.png) | ![linearest](img/linear_c.png) | ![linearest](img/lp_c.png) 
 
 ## Citing
 If you use this in your work please cite the following:
