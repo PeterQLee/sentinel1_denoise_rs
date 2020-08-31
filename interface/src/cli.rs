@@ -234,7 +234,7 @@ fn write_arrayu16<D : ndarray::Dimension>(outf:&hdf5::File, fieldname:&str, arr:
 	}
 	Some((r, c, cores)) => {
 	    let s = arr.shape().to_vec();
-	    let d = arr.to_slice().unwrap().iter().map(|x| *x as f64).collect();
+	    let d = arr.to_slice().unwrap().iter().map(|x| (*x as f64)*(*x as f64)).collect();
 	    let xv = Arc::new(prep_lp::TwoDArray::from_vec(d, s[0], s[1]));
 	    let out = postprocess::multilook_and_floor(xv, r, c, cores);
 	    let group = outf.new_dataset::<f64>().create(fieldname, &[out.rows, out.cols])?;
