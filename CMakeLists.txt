@@ -45,22 +45,24 @@ include_directories(${SCS_PATH})
 set_target_properties(lp_solve PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/)
 
-# 
-#add_custom_target(sentlib ALL
-#    COMMENT "Compiling Sentinel library"
-#    COMMAND ${CMAKE_COMMAND} -E env SCS_LIB=${SCS_LIB_DIR} env CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+#
+message( STATUS "Found SCS_LIB_DIR=${SCS_LIB_DIR}")
+add_custom_target(sentlib ALL
+
+    COMMENT "Compiling Sentinel library"
+    COMMAND ${CMAKE_COMMAND} -E env SCS_LIB=${SCS_LIB_DIR} env CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
     # copy result from library and bin.
-#    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
-#    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
-#    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_BIN} ${CMAKE_CURRENT_BINARY_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_BIN} ${CMAKE_CURRENT_BINARY_DIR}
     
     # link library so it is accessible from python
-#    COMMAND ${CMAKE_COMMAND} -E create_symlink "${SENT_LIB}" "${CMAKE_CURRENT_BINARY_DIR}/s1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${SENT_LIB}" "${CMAKE_CURRENT_BINARY_DIR}/s1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}"
 
     
-#    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-#add_dependencies(sentlib lp_solve)
+add_dependencies(sentlib lp_solve)
 
 execute_process(
   COMMAND "${PYTHON_EXECUTABLE}" -c "

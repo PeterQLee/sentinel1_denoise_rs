@@ -28,7 +28,7 @@ use std::process::Command;
 fn main() {
     match env::var("SCS_LIB") {
 	Ok(s) => {
-	    println!("cargo:rustc-link-search=native={}", s);
+	    println!("cargo:rustc-link-search=native={}/", s);
 	},
 	Err(_e) => {
 	    eprintln!("---------\n---------\n---------\nCouldn't find the default location for scs libraries\nGoing to try the usual spot (i.e. /usr/local/lib).\nIf you have it installed somewhere else, specify this the system environment vars with SCS_INC=path for the directory of the scsdir library\nAlong with SCS_DIR=path for the location of the include files of scs.\n---------\n---------");
