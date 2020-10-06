@@ -11,6 +11,7 @@ find_path(SCS_PATH NAMES scs REQUIRED)
 message(STATUS "${SCS_LIB}")
 message(STATUS "${SCS_PATH}")
 
+message( STATUS "Found SCS_LIB=${SCS_LIB} and SCS_PATH=${SCS_PATH}")
 if(NOT SCS_LIB)
   message(FATAL_ERROR "SCS library not found")
 endif()
@@ -40,25 +41,26 @@ set(C_SOLVE_DIR "${CMAKE_CURRENT_BINARY_DIR}/engine/src/c_solve")
 add_library(lp_solve STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/scs_solve.c
   ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/scs_solve.h)
+include_directories(${SCS_PATH})
 set_target_properties(lp_solve PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/)
 
 # 
-add_custom_target(sentlib ALL
-    COMMENT "Compiling Sentinel library"
-    COMMAND SCS_LIB=${SCS_LIB} CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+#add_custom_target(sentlib ALL
+#    COMMENT "Compiling Sentinel library"
+#    COMMAND ${CMAKE_COMMAND} -E env SCS_LIB=${SCS_LIB_DIR} env CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
     # copy result from library and bin.
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_BIN} ${CMAKE_CURRENT_BINARY_DIR}
+#    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
+#    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
+#    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_BIN} ${CMAKE_CURRENT_BINARY_DIR}
     
     # link library so it is accessible from python
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${SENT_LIB}" "${CMAKE_CURRENT_BINARY_DIR}/s1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}"
+#    COMMAND ${CMAKE_COMMAND} -E create_symlink "${SENT_LIB}" "${CMAKE_CURRENT_BINARY_DIR}/s1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}"
 
     
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+#    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_dependencies(sentlib lp_solve)
+#add_dependencies(sentlib lp_solve)
 
 execute_process(
   COMMAND "${PYTHON_EXECUTABLE}" -c "
