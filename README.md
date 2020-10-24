@@ -3,7 +3,7 @@ Author: Peter Q Lee. pqjlee (at) uwaterloo (dot) ca
 ## About
 This library provides algorithms to remove noise floor intensity patterns that are prevelant in
 Sentinel-1 cross-polarized images in EW mode, and to a lesser degree, IW mode. This is provided in
-four ways\: a command line interface, a Python interface, a Rust interface, and a C interface. Currently the library has only been tested in a Linux environment (Ubuntu 16.04 and 19.10), but testing for Windows is planned for the future.
+four ways\: a command line interface, a Python interface, a Rust interface, and a C interface. Currently the library has only been tested in a Linux environment (Ubuntu 16.04 and 19.10), but testing for Windows is planned for the future. (A Windows binary is provided at https://github.com/PeterQLee/sentinel1_denoise_rs/releases)
 
 
 
@@ -61,21 +61,45 @@ This software has several prerequisites
 2. The rust compiler/manager: cargo
 As these algorithms are written in rust, you will need to install the appropriate tools in order to
 compile it for your computer. You will need to install the nightly rust toolchain by doing the followinng.
-a. Get rustup. Visit [https://rustup.rs] 
-b. Install rust nightly. `rustup toolchain install nightly` and optionally `rustup default nightly` depending on your configuration.
+i. Get rustup. Visit [https://rustup.rs] 
+ii. Install rust nightly. Run `rustup toolchain install nightly` and then `rustup default nightly`.
+iii. You may need to start a new shell.
 
 3. OpenBLAS library [https://github.com/xianyi/OpenBLAS].
 This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install openblas-dev`).
+
 4. HDF5 library version 1.10, with development headers [https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.10/hdf5-1.10.6/]
 This can be installed with your package manager: (e.g. ubuntu/debian `sudo apt install hdf5lib-dev`) currently, although future versions may break this.
-5. Splitting conic-solver library [https://github.com/cvxgrp/scs].
 
-6. Optional - CMake version 3.12 or above [https://cmake.org/download/]. If you are installing this on linux, you can probably get away without using cmake, although you'll need to manually move some files (specifically the location of the python library). This is likely needed for windows builds.
+5. Splitting conic-solver library [https://github.com/cvxgrp/scs]. Once downloaded, run `sudo make install`.
 
+6. Fortran libraries `sudo apt install libgfortran-dev`
+
+7. Optional - CMake version 3.12 or above [https://cmake.org/download/]. If you are installing this on linux, you can probably get away without using cmake, although you'll need to manually move some files (specifically the location of the python library). This is likely needed for windows builds.
+
+If you have ubuntu or debian installed you can install all the requirements by opening the Terminal (Command line) and running:
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup toolchain install nightly
+rustup default nightly
+
+sudo apt-get install build-essential openblas-dev hdf5lib-dev cmake libgfortran-dev
+
+
+git clone https://github.com/cvxgrp/scs
+cd scs
+sudo make install
+cd ../
+
+git clone https://github.com/PeterQLee/sentinel1_denoise_rs
+cd sentinel1_denoise_rs
+```
 
 ### Installing
+First make sure you've installed all the pre-requisites described above. *Be sure to do the following in a new Terminal shell so your PATH is updated*. You now have two options for installation. The CMake way and the Non-CMake way.
 
-#### Cmake
+#### CMake
 Create the build scripts using the standard procedure for building cmake projects on your system (see https://cmake.org/runningcmake/)
 
 On unix this can be done with the following
@@ -88,7 +112,7 @@ sudo make install
 ```
 If this built, then everything should be in the proper space for system-wide use. Note for the last step, you might not be able to find cargo in sudo mode, so you might need to do `sudo ln -s $HOME/.cargo/bin/cargo /usr/local/bin` first, depending on your configuration.
 
-#### Non Cmake
+#### Non-CMake
 ```bash
 cargo build --release
 ```
@@ -112,7 +136,7 @@ Use ```denoise_s1 --help``` for usage options.
 
 Example usage: 
 ```bash
-denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.SAFE output.hdf5
+denoise_s1 -m 16,16,16 LPEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_023522_028FAA_5A8B.SAFE output.hdf5
 ```
 
 * `<opmode>` is used to indicate the algorithm you wish to apply to the data
@@ -131,7 +155,7 @@ denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_02
 >> `copol`: the unprocessed co-polarized image in linear units\
 >> `y`: the default noise floor estimate in linear units
 
-> * `LpEst`: Generates a noise floor estimate to be power functions of the antenna radiation pattern strength with respect to range. This is the most advanced and computationally expensive method that requires multiple linear programs to be solved. As a result, it is recommended to store `m` and `b` after computation and run `LpApply` if you need to regenerate the image. Writes six groups to `<outputsar>`.
+> * `LPEst`: Generates a noise floor estimate to be power functions of the antenna radiation pattern strength with respect to range. This is the most advanced and computationally expensive method that requires multiple linear programs to be solved. As a result, it is recommended to store `m` and `b` after computation and run `LPApply` if you need to regenerate the image. Writes six groups to `<outputsar>`.
 >> `crosspol`: the processed cross-polarized image in square units\
 >> `copol`: the unprocessed co-polarized image in linear units\
 >> `k`: the scaling values provided by the user.\
@@ -139,7 +163,7 @@ denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_02
 >> `b`: the slopes in the power functions, in order of subswaths and range splits\
 >> `subswaths`: the number of subswaths in the image.
 
-> * `LpApply`: Applies power function method to the image using user provided parameters. This requires the `<paramhdf>` flag to be specified, with the groups `m` and `b` holding the parameters. Writes two groups to `<outputsar>`
+> * `LPApply`: Applies power function method to the image using user provided parameters. This requires the `<paramhdf>` flag to be specified, with the groups `m` and `b` holding the parameters. Writes two groups to `<outputsar>`
 >> `crosspol`: the processed cross-polarized image in square units\
 >> `copol`: the unprocessed co-polarized image in linear units
 
@@ -150,7 +174,7 @@ denoise_s1 -p 16,16,16 LpEst S1A_EW_GRDM_1SDH_20180902T164932_20180902T165032_02
 * `OPTIONS` present a number of optional flags that influence the selected `<opmode>`.
 > * `-c=[path]`, `--config=[path]`: path to a configuration .ini file with parameters to modify the algorithms. An example .ini file is given in as base_config.ini.
 > * `-p=[path]`, `--paramhdf=[path]`: a path to an hdf5 file holding parameter values.
-> * `-r`, `--nolstsq_rescale`: = indicates not to apply `LinearEst` before `LpEst` and to use default noise floor without scaling. Ignored for IW images. Ignored in every mode except `LpEst`.
+> * `-r`, `--nolstsq_rescale`: = indicates not to apply `LinearEst` before `LPEst` and to use default noise floor without scaling. Ignored for IW images. Ignored in every mode except `LPEst`.
 > * `-m=row,col,cores`, `--multilook=row,col,cores`: applies multilook processing to all of the output images. It reduces the output dimensions by a factor of `row` and `col` along the rows and columns respectively. `cores` indicates the number of CPU cores to use during processing. **Note that this results in the values of the images being converted to linear units. Any negative values after multilooking are rounded to zero.**
 
 ### Program interface
