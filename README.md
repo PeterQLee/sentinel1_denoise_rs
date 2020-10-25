@@ -55,6 +55,21 @@ If you use this in your work please cite the following:
 ```
 ## Installation
 
+The easiest way to get started is to use one of the pre-built packages. For
+Python, you can easily install this by typing in the command line
+
+```bash
+sudo pip3 install s1_denoise -U
+```
+
+For the command line tool (CLI) go to the Releases page
+https://github.com/PeterQLee/sentinel1_denoise_rs/releases , click on "Assets" and download
+`s1_denoise` for Linux or `windows-s1_denoise.zip` for windows. 
+
+Installing from source is a lot more difficult, but instructions are included below.
+
+### Installing from Source
+
 This software has several prerequisites
 
 1. A C compiler
@@ -96,7 +111,7 @@ git clone https://github.com/PeterQLee/sentinel1_denoise_rs
 cd sentinel1_denoise_rs
 ```
 
-### Installing
+
 First make sure you've installed all the pre-requisites described above. *Be sure to do the following in a new Terminal shell so your PATH is updated*. You now have two options for installation. The CMake way and the Non-CMake way.
 
 #### CMake
