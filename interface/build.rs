@@ -50,6 +50,8 @@ fn main() {
     println!("cargo:rustc-link-search=native={}/../engine/src/c_solve/", base);
 
     println!("cargo:rustc-link-lib=static=lp_solve");
-
+    
+    println!("cargo:rustc-link-search=native=/usr/lib/gcc/x86_64-linux-gnu/9");
+    println!("cargo:rustc-link-lib=static=gfortran");
     
 }

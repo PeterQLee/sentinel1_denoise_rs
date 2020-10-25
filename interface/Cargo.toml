@@ -1,22 +1,29 @@
 [package]
-name = "s1-interface"
-version = "0.1.0"
+name = "s1-noisefloor"
+version = "0.1.1"
 authors = ["PeterQLee <leep1995@gmail.com>"]
 edition = "2018"
-
+readme = "README.md"
+description = "Algorithms to remove noise floor intensity patterns that are prevelant in Sentinel-1 cross-polarized images in EW and IW modes"
+license = "MIT"
+homepage = "https://github.com/PeterQLee/sentinel1_denoise_rs/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 numpy = "0.7.0"
-s1-noisefloor-engine = {path = "../engine"}
+s1-noisefloor-engine = {path = "../engine", version = "0.1.1"}
 libc = "*"
-hdf5 = "0.6.1"
+hdf5 = {version="0.7.0"}
+hdf5-sys = {version="0.7.0",features=["static"]}
 clap = "2.33.2"
 ndarray = "0.13.0"
 regex = "1.3.9"
 
+# openblas-src = {version="0.8", features = ["static"]}
+
+
 [dependencies.pyo3]
-version = "0.8"
+version = "0.8.5"
 features = ["extension-module"]
 
 [build-dependencies]
@@ -31,3 +38,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "denoise_s1"
 path= "src/cli.rs"
+
+
+[package.metadata.maturin]
+project-url = ["https://github.com/PeterQLee/sentinel1_denoise_rs/"]
+classifier = ["Programming Language :: Rust", "Topic :: Scientific/Engineering :: GIS"]

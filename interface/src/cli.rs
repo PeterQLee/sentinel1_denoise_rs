@@ -22,7 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+// extern crate lapack;
+// extern crate blas;
+
 extern crate s1_noisefloor_engine;
+
 
 use s1_noisefloor_engine::parse::{LinearConfig, HyperParams};
 #[macro_use]
