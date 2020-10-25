@@ -8,9 +8,9 @@ edition = "2018"
 [dependencies]
 blas = "0.20"
 lapack = "0.16"
-openblas-src = {version="0.8", features = ["static"]}
-# lapack-src = {version="0.6.0", features = ["openblas"]}
-# blas-src = {version="0.6.1", features = ["openblas"] }
+openblas-src = {version="0.9", features = ["static"]}
+lapack-src = {version="0.6.0", features = ["openblas"]}
+blas-src = {version="0.6.1", features = ["openblas"] }
 quick-xml = "0.14.0"
 ndarray = "0.13.0"
 numpy = "0.7.0"

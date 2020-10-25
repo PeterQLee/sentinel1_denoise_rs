@@ -1,10 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
-find_package(PythonInterp 3)
-find_package(PythonLibs 3)
 
-find_package(HDF5 REQUIRED)
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
 find_library(SCS_LIB NAMES scsdir  REQUIRED)
 find_path(SCS_PATH NAMES scs REQUIRED)
 
@@ -22,13 +16,6 @@ endif()
 get_filename_component(SCS_LIB_DIR ${SCS_LIB} DIRECTORY)
 message(STATUS "${SCS_LIB_DIR}")
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(CARGO_CMD cargo build)
-  set(TARGET_DIR "debug")
-else ()
-  set(CARGO_CMD cargo build --release)
-  set(TARGET_DIR "release")
-endif ()
 
 set(SENT_LIB "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/libs1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}")
 set(SENT_BIN "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/denoise_s1${CMAKE_EXECUTABLE_SUFFIX}")
@@ -36,7 +23,7 @@ set(SENT_RLIB "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/libs1_noisefloor_engine
 set(SENT_INCLUDE_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/interface.h")
 
 set(C_SOLVE_DIR "${CMAKE_CURRENT_BINARY_DIR}/engine/src/c_solve")
-
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # supporting lp solve c program
 add_library(lp_solve STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/scs_solve.c
@@ -46,62 +33,62 @@ set_target_properties(lp_solve PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/engine/src/c_solve/)
 
 #
-message( STATUS "Found SCS_LIB_DIR=${SCS_LIB_DIR}")
-add_custom_target(sentlib ALL
+# message( STATUS "Found SCS_LIB_DIR=${SCS_LIB_DIR}")
+# add_custom_target(sentlib ALL
 
-    COMMENT "Compiling Sentinel library"
-    COMMAND ${CMAKE_COMMAND} -E env SCS_LIB=${SCS_LIB_DIR} env CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
-    # copy result from library and bin.
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_BIN} ${CMAKE_CURRENT_BINARY_DIR}
+#     COMMENT "Compiling Sentinel library"
+#     COMMAND ${CMAKE_COMMAND} -E env SCS_LIB=${SCS_LIB_DIR} env CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+#     # copy result from library and bin.
+#     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_LIB} ${CMAKE_CURRENT_BINARY_DIR}
+#     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_RLIB} ${CMAKE_CURRENT_BINARY_DIR}
+#     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SENT_BIN} ${CMAKE_CURRENT_BINARY_DIR}
     
-    # link library so it is accessible from python
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${SENT_LIB}" "${CMAKE_CURRENT_BINARY_DIR}/s1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}"
+#     # link library so it is accessible from python
+#     COMMAND ${CMAKE_COMMAND} -E create_symlink "${SENT_LIB}" "${CMAKE_CURRENT_BINARY_DIR}/s1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}"
 
     
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_dependencies(sentlib lp_solve)
+# add_dependencies(sentlib lp_solve)
 
-execute_process(
-  COMMAND "${PYTHON_EXECUTABLE}" -c "
-from distutils import sysconfig as sc
-print(sc.get_python_lib(plat_specific=True))"
-  OUTPUT_VARIABLE PYTHON_SITE
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-
-
-message (STATUS "python sitelib ${PYTHON_SITE}")
-
-set(SENT_LIB_INSTALL "${CMAKE_INSTALL_LIBDIR}/libs1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}")
+# execute_process(
+#   COMMAND "${PYTHON_EXECUTABLE}" -c "
+# from distutils import sysconfig as sc
+# print(sc.get_python_lib(plat_specific=True))"
+#   OUTPUT_VARIABLE PYTHON_SITE
+#   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 
-# Installation entries
-include(GNUInstallDirs)
-install(FILES ${SENT_INCLUDE_HEADER}
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/s1_noisefloor/
-    PERMISSIONS OWNER_WRITE OWNER_READ
-    GROUP_READ
-    WORLD_READ
-  )
+# message (STATUS "python sitelib ${PYTHON_SITE}")
 
-install(FILES ${SENT_LIB}
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  PERMISSIONS OWNER_EXECUTE OWNER_READ
-  GROUP_EXECUTE GROUP_READ
-  WORLD_READ WORLD_EXECUTE
-  )
+# set(SENT_LIB_INSTALL "${CMAKE_INSTALL_LIBDIR}/libs1_noisefloor${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 
-install(FILES ${SENT_BIN}
-  DESTINATION ${CMAKE_INSTALL_BINDIR}
-  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
-  GROUP_EXECUTE GROUP_READ
-  WORLD_READ WORLD_EXECUTE
-  )
-install(CODE "execute_process( \
-    COMMAND ${CMAKE_COMMAND} -E create_symlink \
-    ${SENT_LIB_INSTALL} \
-    ${PYTHON_SITE}/s1_noisefloor   \
-    )")
+# # Installation entries
+# include(GNUInstallDirs)
+# install(FILES ${SENT_INCLUDE_HEADER}
+#   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/s1_noisefloor/
+#     PERMISSIONS OWNER_WRITE OWNER_READ
+#     GROUP_READ
+#     WORLD_READ
+#   )
+
+# install(FILES ${SENT_LIB}
+#   DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#   PERMISSIONS OWNER_EXECUTE OWNER_READ
+#   GROUP_EXECUTE GROUP_READ
+#   WORLD_READ WORLD_EXECUTE
+#   )
+
+
+# install(FILES ${SENT_BIN}
+#   DESTINATION ${CMAKE_INSTALL_BINDIR}
+#   PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+#   GROUP_EXECUTE GROUP_READ
+#   WORLD_READ WORLD_EXECUTE
+#   )
+# install(CODE "execute_process( \
+#     COMMAND ${CMAKE_COMMAND} -E create_symlink \
+#     ${SENT_LIB_INSTALL} \
+#     ${PYTHON_SITE}/s1_noisefloor   \
+#     )")

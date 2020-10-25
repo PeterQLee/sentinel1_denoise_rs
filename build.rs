@@ -41,17 +41,21 @@ fn main() {
 			
 		}
 	    }
-	    println!("cargo:rustc-link-lib=static=scsdir");
+	    
 	}
     }
-    
-
     let base = env::var("CARGO_MANIFEST_DIR").unwrap();
-    println!("cargo:rustc-link-search=native={}/../engine/src/c_solve/", base);
+    
+    println!("cargo:rustc-link-search=native={}/scs/out/", base);
+    println!("cargo:rustc-link-lib=static=scsdir");
+
+
+    println!("cargo:rustc-link-search=native={}/engine/src/c_solve/", base);
 
     println!("cargo:rustc-link-lib=static=lp_solve");
     
-    println!("cargo:rustc-link-search=native=/usr/lib/gcc/x86_64-linux-gnu/9");
+    //println!("cargo:rustc-link-search=native=/opt/rh/devtoolset-8/root/usr/lib/gcc/x86_64-redhat-linux/8");
+    println!("cargo:rustc-link-search=native={}/gcc-8.3.0/objdir/x86_64-pc-linux-gnu/libgfortran/.libs/", base);
     println!("cargo:rustc-link-lib=static=gfortran");
     
 }

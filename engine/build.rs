@@ -37,7 +37,7 @@ fn main() {
 	}
     }
 
-    println!("cargo:rustc-link-lib=static=scsdir");
+    // println!("cargo:rustc-link-lib=static=scsdir");
         
     let base = env::var("CARGO_MANIFEST_DIR").unwrap();
 
