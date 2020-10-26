@@ -59,14 +59,14 @@ The easiest way to get started is to use one of the pre-built packages. For
 Python, you can easily install this by typing in the command line
 
 ```bash
-sudo pip3 install s1_denoise -U
+sudo pip3 install s1-noisefloor -U
 ```
 
 For the command line tool (CLI) go to the Releases page
 https://github.com/PeterQLee/sentinel1_denoise_rs/releases , click on "Assets" and download
 `s1_denoise` for Linux or `windows-s1_denoise.zip` for windows. 
 
-Installing from source is a lot more difficult, but instructions are included below.
+Instructions for installing from source are included below, but are significantly more complicated.
 
 ### Installing from Source
 
