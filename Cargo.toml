@@ -3,7 +3,7 @@ name = "s1-noisefloor"
 version = "0.1.1"
 authors = ["PeterQLee <leep1995@gmail.com>"]
 edition = "2018"
-readme = "README_s.md"
+readme = "README.md"
 description = "Algorithms to remove noise floor intensity patterns that are prevelant in Sentinel-1 cross-polarized images in EW and IW modes"
 license = "MIT"
 homepage = "https://github.com/PeterQLee/sentinel1_denoise_rs/"
@@ -23,7 +23,7 @@ regex = "1.3.9"
 
 
 [dependencies.pyo3]
-version = "0.8.5"
+version = "0.20.0"
 features = ["extension-module"]
 
 [build-dependencies]
@@ -40,9 +40,6 @@ name = "denoise_s1"
 path= "interface/src/cli.rs"
 
 
-[package.metadata.maturin]
-project-url = ["https://github.com/PeterQLee/sentinel1_denoise_rs/"]
-classifier = ["Programming Language :: Rust", "Topic :: Scientific/Engineering :: GIS"]
 
 [tool.maturin]
 bindings = ["basdin", "pyo3"]

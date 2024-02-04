@@ -1,0 +1,10 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "s1-noisefloor"
+authors = [{name = "Peter Q. Lee", email = "leep1995@gmail.com"}]
+version = "0.1.1"
+project-url = ["https://github.com/PeterQLee/sentinel1_denoise_rs/"]
+classifiers = ["Programming Language :: Rust", "Topic :: Scientific/Engineering :: GIS"]
