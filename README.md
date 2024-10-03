@@ -44,13 +44,15 @@ If you use this in your work please cite the following:
   url = {http://www.sciencedirect.com/science/article/pii/S0034425720303527}
 }
 
-@Unpublished{pqjlee_LP,
-  author =       {P. Q. Lee and L. Xu and D. A. Clausi},
-  title = 	 {Estimating Noise Floor in {Sentinel-1} Images with Linear Programming and Least Squares},
-  year = {2020},
-  note = {Draft paper can be found at \url{http://www.eng.uwaterloo.ca/~pqjlee/lp_paper_aug14_2020.pdf}
-  }
-  
+@Article{pqjlee_LP,
+  author={P. Q. Lee and L. Xu and D. A. Clausi},
+  journal={IEEE Transactions on Geoscience and Remote Sensing}, 
+  title={Estimating Noise Floor in Sentinel-1 Images With Linear Programming and Least Squares}, 
+  year={2022},
+  volume={60},
+  number={},
+  pages={1-14},
+  doi={10.1109/TGRS.2021.3101455}}
 
 ```
 ## Installation
